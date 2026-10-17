@@ -1,0 +1,64 @@
+linter:
+  rules:
+    # 错误级别
+    - avoid_print  # 禁止使用print，使用log
+    - avoid_relative_lib_imports  # 禁止相对路径导入lib
+    - avoid_types_as_parameter_names  # 避免使用类型作为参数名
+    - no_duplicate_case_values  # 禁止重复的case值
+    - prefer_void_to_null  # 优先使用void而不是null
+    - throw_in_finally  # 禁止在finally中抛出异常
+    - unnecessary_statements  # 禁止无用语句
+    - use_key_in_widget_constructors  # Widget构造函数使用key
+
+    # 代码风格
+    - always_declare_return_types  # 总是声明返回类型
+    - always_put_control_body_on_new_line  # 控制语句主体换行
+    - always_require_non_null_named_parameters  # 非空命名参数
+    - avoid_unnecessary_containers  # 避免不必要的Container
+    - prefer_const_constructors  # 优先使用const构造函数
+    - prefer_const_constructors_in_immutables  # 不可变类使用const
+    - prefer_const_declarations  # 优先使用const声明
+    - prefer_const_literals_to_create_immutables  # 使用const字面量
+    - prefer_final_fields  # 优先使用final字段
+    - prefer_final_in_for_each  # forEach使用final
+    - prefer_final_locals  # 优先使用final局部变量
+    - prefer_single_quotes  # 优先使用单引号
+    - prefer_relative_imports  # 优先使用相对导入
+    - sort_child_properties_last  # child属性放最后
+    - use_full_hex_values_for_flutter_colors  # 使用完整hex颜色值
+    - unnecessary_brace_in_string_interps  # 字符串插值去掉不必要的花括号
+
+    # 命名规范
+    - camel_case_types  # 类型使用驼峰命名
+    - constant_identifier_names  # 常量使用大写下划线
+    - file_names  # 文件名小写下划线
+    - library_names  # 库名小写下划线
+    - library_prefixes  # 库前缀小写下划线
+    - non_constant_identifier_names  # 非常量标识符驼峰命名
+    - package_names  # 包名小写下划线
+
+    # 注释
+    - comment_references  # 注释引用
+    - slash_for_doc_comments  # 文档注释使用///
+
+    # 性能
+    - avoid_function_literals_in_foreach_calls  # forEach避免函数字面量
+    - list_remove_unrelated_type  # list.remove类型相关
+    - prefer_foreach  # 优先使用forEach
+    - prefer_spread_collections  # 优先使用展开运算符
+
+    # 错误处理
+    - avoid_catching_errors  # 避免捕获Error
+    - use_rethrow_when_possible  # 可能时使用rethrow
+
+analyzer:
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+  errors:
+    missing_required_param: error
+    missing_return: error
+    todo: ignore
+  strong-mode:
+    implicit-casts: false
+    implicit-dynamic: false

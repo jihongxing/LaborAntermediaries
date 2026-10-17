@@ -151,6 +151,220 @@ ALTER TABLE salary_record ADD CONSTRAINT check_salary_positive
 
 ---
 
+## 🔧 核心能力规范（强制）
+
+### 必须使用项目提供的P0/P1能力
+
+**项目已经实现了P0和P1共18项核心能力，后续开发必须使用这些能力，禁止重复造轮子或自己发明类似功能。**
+
+#### P0核心基础能力（12项）- 必须使用
+
+| 序号 | 能力 | 类名 | 使用场景 | 禁止行为 |
+|------|------|------|---------|---------|
+| 1 | **统一响应** | `Result`, `PageResult` | 所有Controller返回值 | ❌ 自定义Response类 |
+| 2 | **错误码** | `ErrorCode` | 所有异常和错误提示 | ❌ 硬编码错误码和消息 |
+| 3 | **业务异常** | `BusinessException` | 业务逻辑抛异常 | ❌ 使用RuntimeException |
+| 4 | **全局异常处理** | `GlobalExceptionHandler` | 自动处理，无需手动 | ❌ Controller里try-catch |
+| 5 | **租户上下文** | `TenantContext` | 自动处理，无需手动 | ❌ 手动传递tenantId参数 |
+| 6 | **MyBatis租户插件** | `MyBatisPlusConfig` | 自动注入WHERE条件 | ❌ SQL手动拼接tenant_id |
+| 7 | **RequestId追踪** | `RequestIdFilter` | 自动处理，日志自动包含 | ❌ 自己生成traceId |
+| 8 | **日志切面** | `LogAspect` | 自动记录请求日志 | ❌ 手动在Controller写日志 |
+| 9 | **金额计算** | `MoneyUtil` | **所有金额计算必须用** | ❌ 用BigDecimal的+、-、*、/ |
+| 10 | **日期处理** | `DateUtil` | 所有日期格式化、计算 | ❌ 用SimpleDateFormat |
+| 11 | **数据脱敏** | `DesensitizeUtil` | 返回前端的敏感信息 | ❌ 手动截取字符串 |
+| 12 | **参数校验** | `ValidationUtil` | 身份证、手机号校验 | ❌ 正则表达式硬编码 |
+
+#### P1常用工具类（6项）- 必须使用
+
+| 序号 | 能力 | 类名 | 使用场景 | 禁止行为 |
+|------|------|------|---------|---------|
+| 1 | **用户上下文** | `UserContext` | 获取当前登录用户信息 | ❌ 参数传递userId |
+| 2 | **ID生成器** | `IdGenerator` | 生成主键ID、业务编号 | ❌ 数据库自增ID、UUID |
+| 3 | **加密解密** | `CryptoUtil` | 密码、敏感信息加密 | ❌ 自己写BCrypt、AES |
+| 4 | **断言工具** | `AssertUtil` | 参数校验、业务断言 | ❌ if + throw异常 |
+| 5 | **字符串工具** | `StringUtil` | 字符串处理、驼峰转换 | ❌ 引入Apache Commons |
+| 6 | **集合工具** | `CollectionUtil` | 集合操作、分组、过滤 | ❌ 自己写for循环 |
+
+### 强制使用示例
+
+#### ✅ 正确示例 - 必须这样写
+
+```java
+@Service
+@RequiredArgsConstructor
+public class EmployeeServiceImpl implements EmployeeService {
+
+    private final EmployeeMapper employeeMapper;
+
+    @Override
+    public Result<EmployeeVO> add(EmployeeAddDTO dto) {
+        // 1. 参数校验 - 必须用AssertUtil
+        AssertUtil.notEmpty(dto.getName(), "员工姓名不能为空");
+        AssertUtil.notEmpty(dto.getIdCard(), "身份证号不能为空");
+        AssertUtil.isTrue(ValidationUtil.isValidIdCard(dto.getIdCard()), "身份证号格式不正确");
+
+        // 2. 生成ID和业务编号 - 必须用IdGenerator
+        Long id = IdGenerator.nextId();
+        String employeeNo = IdGenerator.generateEmployeeNo();
+
+        // 3. 加密敏感信息 - 必须用CryptoUtil
+        String encryptedIdCard = CryptoUtil.aesEncrypt(dto.getIdCard());
+
+        // 4. 获取当前用户 - 必须用UserContext
+        Long userId = UserContext.getUserId();
+        Long tenantId = UserContext.getTenantId();
+
+        // 5. 构建实体
+        Employee employee = new Employee();
+        employee.setId(id);
+        employee.setEmployeeNo(employeeNo);
+        employee.setName(dto.getName());
+        employee.setIdCard(encryptedIdCard);
+        employee.setCreatedBy(userId);
+        employee.setTenantId(tenantId);
+
+        // 6. 保存
+        employeeMapper.insert(employee);
+
+        // 7. 返回 - 必须用Result
+        return Result.success(convertToVO(employee));
+    }
+
+    @Override
+    public Result<PageResult<EmployeeVO>> page(EmployeeQueryDTO dto) {
+        // 1. 分页查询
+        Page<Employee> page = new Page<>(dto.getPage(), dto.getSize());
+        Page<Employee> result = employeeMapper.selectPage(page, null);
+
+        // 2. 转换 - 必须用CollectionUtil
+        List<EmployeeVO> voList = CollectionUtil.map(result.getRecords(), this::convertToVO);
+
+        // 3. 返回 - 必须用PageResult
+        return Result.success(PageResult.of(result, voList));
+    }
+
+    @Override
+    public Result<Void> calculateSalary(Long employeeId, String month) {
+        // 金额计算 - 必须用MoneyUtil
+        BigDecimal grossSalary = new BigDecimal("5000.00");
+        BigDecimal deduction = new BigDecimal("500.00");
+        BigDecimal netSalary = MoneyUtil.subtract(grossSalary, deduction); // 必须用MoneyUtil
+
+        // 格式化金额 - 必须用MoneyUtil
+        String formatted = MoneyUtil.format(netSalary); // ¥4,500.00
+
+        return Result.success();
+    }
+
+    private EmployeeVO convertToVO(Employee employee) {
+        EmployeeVO vo = new EmployeeVO();
+        vo.setId(employee.getId());
+        vo.setEmployeeNo(employee.getEmployeeNo());
+        vo.setName(employee.getName());
+        
+        // 解密并脱敏 - 必须用CryptoUtil和DesensitizeUtil
+        String idCard = CryptoUtil.aesDecrypt(employee.getIdCard());
+        vo.setIdCard(DesensitizeUtil.idCard(idCard));
+        
+        // 日期格式化 - 必须用DateUtil
+        vo.setCreatedAt(DateUtil.format(employee.getCreatedAt()));
+        
+        return vo;
+    }
+}
+```
+
+#### ❌ 错误示例 - 禁止这样写
+
+```java
+@Service
+public class EmployeeServiceImpl implements EmployeeService {
+
+    @Override
+    public Map<String, Object> add(EmployeeAddDTO dto) {
+        // ❌ 错误1：参数校验用if + throw RuntimeException
+        if (dto.getName() == null || dto.getName().isEmpty()) {
+            throw new RuntimeException("员工姓名不能为空"); // 禁止
+        }
+
+        // ❌ 错误2：用UUID生成ID
+        String id = UUID.randomUUID().toString(); // 禁止
+
+        // ❌ 错误3：明文存储身份证
+        employee.setIdCard(dto.getIdCard()); // 禁止
+
+        // ❌ 错误4：参数传递userId和tenantId
+        employeeMapper.insert(employee, userId, tenantId); // 禁止
+
+        // ❌ 错误5：自定义返回格式
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("data", employee);
+        return result; // 禁止
+    }
+
+    @Override
+    public Map<String, Object> page(EmployeeQueryDTO dto) {
+        // ❌ 错误6：自己写for循环转换
+        List<EmployeeVO> voList = new ArrayList<>();
+        for (Employee employee : employees) {
+            voList.add(convertToVO(employee));
+        } // 禁止，必须用CollectionUtil.map()
+
+        return result;
+    }
+
+    @Override
+    public void calculateSalary(Long employeeId, String month) {
+        // ❌ 错误7：用double计算金额
+        double grossSalary = 5000.0;
+        double deduction = 500.0;
+        double netSalary = grossSalary - deduction; // 禁止
+
+        // ❌ 错误8：直接用BigDecimal的+、-、*、/
+        BigDecimal result = grossSalary.subtract(deduction); // 禁止，必须用MoneyUtil
+    }
+
+    private EmployeeVO convertToVO(Employee employee) {
+        EmployeeVO vo = new EmployeeVO();
+        
+        // ❌ 错误9：手动截取字符串脱敏
+        String idCard = employee.getIdCard();
+        String masked = idCard.substring(0, 3) + "***" + idCard.substring(idCard.length() - 4);
+        vo.setIdCard(masked); // 禁止，必须用DesensitizeUtil
+        
+        // ❌ 错误10：用SimpleDateFormat格式化日期
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        vo.setCreatedAt(sdf.format(employee.getCreatedAt())); // 禁止，必须用DateUtil
+        
+        return vo;
+    }
+}
+```
+
+### 违反规范的后果
+
+1. **Code Review不通过** - 代码审查时会被打回重写
+2. **无法通过CheckStyle检查** - CI/CD会自动检查并拒绝合并
+3. **单元测试失败** - 不符合规范的代码会导致测试失败
+4. **生产事故** - 如用double计算金额，会导致财务数据错误
+
+### 如何检查是否遵守规范
+
+```bash
+# 1. 运行CheckStyle检查
+mvn checkstyle:check
+
+# 2. 运行单元测试
+mvn test
+
+# 3. 查看代码规范文档
+# 详见：backend/P0_IMPLEMENTATION_COMPLETE.md
+# 详见：backend/P1_IMPLEMENTATION_COMPLETE.md
+```
+
+---
+
 ## 💻 代码规范（强制）
 
 ### Java代码规范
