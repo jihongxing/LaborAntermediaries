@@ -1,0 +1,645 @@
+# CLAUDE.md - 技术规范与开发约束
+
+## 📋 文档说明
+
+本文档定义项目的**技术规范、开发约束、代码标准**，所有开发人员和AI助手必须严格遵守。
+
+---
+
+## 🏗️ 技术架构约束
+
+### 后端技术栈（强制）
+
+| 技术 | 版本 | 说明 | 原因 |
+|------|------|------|------|
+| **Java** | JDK 17+ | 开发语言 | LTS版本，稳定可靠 |
+| **Spring Boot** | 3.2+ | 开发框架 | 主流框架，生态完善 |
+| **MyBatis Plus** | 3.5+ | ORM框架 | 代码生成，提高效率 |
+| **MySQL** | 8.0+ | 关系数据库 | 主流数据库，性能稳定 |
+| **Redis** | 7.0+ | 缓存 | 缓存、分布式锁 |
+| **RabbitMQ** | 3.12+ | 消息队列 | 异步处理 |
+
+### 前端技术栈（强制）
+
+| 端口 | 技术栈 | UI组件库 | 说明 |
+|------|--------|---------|------|
+| **Web后台** | Vue 3 + TypeScript + Vite | Element Plus | 管理后台标准栈 |
+| **移动App** | Flutter 3.x | Material Design | 一套代码编译iOS/Android |
+| **微信小程序** | uni-app 3.x | uni-ui | 一套代码编译多平台 |
+
+### 禁止使用的技术
+
+❌ **禁止使用**：
+- ~~Struts、SSH等老旧框架~~
+- ~~JSP、Servlet直接开发~~
+- ~~jQuery（Web前端）~~
+- ~~原生Android/iOS开发（必须用Flutter）~~
+- ~~PHP、Python、Node.js后端（必须用Java）~~
+
+---
+
+## 🗄️ 数据库设计规范（强制）
+
+### 多租户设计（核心约束）
+
+**所有业务表必须包含`tenant_id`字段**：
+
+```sql
+CREATE TABLE xxx (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+  tenant_id BIGINT NOT NULL COMMENT '租户ID（必须）',
+  ...其他字段...
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted_at TIMESTAMP NULL COMMENT '删除时间（软删除）',
+  INDEX idx_tenant_id (tenant_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+**强制要求**：
+1. ✅ 所有业务表必须有`tenant_id`字段
+2. ✅ 所有SQL查询必须自动注入`WHERE tenant_id = ?`
+3. ✅ 使用MyBatis Plus的租户插件自动处理
+4. ✅ 数据隔离是**安全红线**，必须100%保证
+
+### 必备字段（强制）
+
+所有表必须包含以下字段：
+
+```sql
+id BIGINT PRIMARY KEY AUTO_INCREMENT,
+tenant_id BIGINT NOT NULL COMMENT '租户ID',
+created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+deleted_at TIMESTAMP NULL COMMENT '软删除时间'
+```
+
+### 命名规范（强制）
+
+| 对象 | 规范 | 示例 | 说明 |
+|------|------|------|------|
+| **表名** | 小写+下划线 | `employee_basic` | 单数形式 |
+| **字段名** | 小写+下划线 | `created_at` | 不用驼峰 |
+| **索引名** | `idx_字段名` | `idx_tenant_id` | 普通索引 |
+| **唯一索引** | `uk_字段名` | `uk_id_card` | 唯一索引 |
+| **主键** | `id` | `id` | 统一用id |
+
+### 字段类型约束（强制）
+
+| 数据类型 | 数据库类型 | Java类型 | 说明 |
+|---------|-----------|---------|------|
+| **主键** | `BIGINT` | `Long` | 统一用BIGINT，不用INT |
+| **金额** | `DECIMAL(10,2)` | `BigDecimal` | **必须用DECIMAL，禁止用DOUBLE** |
+| **日期时间** | `TIMESTAMP` | `LocalDateTime` | 不用DATETIME |
+| **布尔** | `TINYINT(1)` | `Boolean` | 0=false, 1=true |
+| **字符串** | `VARCHAR(N)` | `String` | 根据实际长度设置 |
+| **长文本** | `TEXT` | `String` | 超过500字符用TEXT |
+
+**金额字段的严格要求**：
+- ✅ 数据库必须用`DECIMAL(10,2)`
+- ✅ Java必须用`BigDecimal`，**禁止用double/float**
+- ✅ 前端显示必须格式化为"¥X,XXX.XX"
+
+**原因**：
+```java
+// ❌ 错误示例（double会有精度问题）
+double salary = 2490.5;
+double deduction = 100.3;
+double result = salary - deduction; // 2390.1999999999998
+
+// ✅ 正确示例（BigDecimal精确）
+BigDecimal salary = new BigDecimal("2490.50");
+BigDecimal deduction = new BigDecimal("100.30");
+BigDecimal result = salary.subtract(deduction); // 2390.20
+```
+
+---
+
+## 💻 代码规范（强制）
+
+### Java代码规范
+
+**基础规范**：
+- 遵循《阿里巴巴Java开发手册》
+- 使用Lombok减少模板代码
+- 使用CheckStyle静态检查
+
+**分层架构（强制）**：
+```
+Controller层：只做参数校验和转发，不写业务逻辑
+   ↓
+Service层：写业务逻辑，不直接操作数据库
+   ↓
+Mapper层：数据库操作，不写业务逻辑
+```
+
+**禁止的写法**：
+```java
+// ❌ 禁止：Controller层直接操作数据库
+@RestController
+public class EmployeeController {
+    @Autowired
+    private EmployeeMapper employeeMapper; // 禁止
+    
+    @GetMapping("/employee/{id}")
+    public Employee get(@PathVariable Long id) {
+        return employeeMapper.selectById(id); // 禁止
+    }
+}
+
+// ✅ 正确：Controller层调用Service层
+@RestController
+public class EmployeeController {
+    @Autowired
+    private EmployeeService employeeService; // 正确
+    
+    @GetMapping("/employee/{id}")
+    public Employee get(@PathVariable Long id) {
+        return employeeService.getById(id); // 正确
+    }
+}
+```
+
+### 命名规范（强制）
+
+| 对象 | 规范 | 示例 |
+|------|------|------|
+| **类名** | 大驼峰（PascalCase） | `EmployeeService` |
+| **方法名** | 小驼峰（camelCase） | `getEmployeeById` |
+| **变量名** | 小驼峰（camelCase） | `employeeName` |
+| **常量** | 全大写+下划线 | `MAX_RETRY_COUNT` |
+| **包名** | 全小写 | `com.company.labor` |
+
+### 注释规范（强制）
+
+**必须写注释的地方**：
+1. ✅ 所有public方法必须有JavaDoc注释
+2. ✅ 所有复杂业务逻辑必须有行内注释
+3. ✅ 所有魔法数字必须用常量并注释
+
+```java
+/**
+ * 计算员工工资
+ * 
+ * @param employeeId 员工ID
+ * @param month 月份（格式：YYYY-MM）
+ * @return 工资详情
+ */
+public SalaryDetail calculateSalary(Long employeeId, String month) {
+    // 获取工资政策
+    SalaryPolicy policy = policyService.getByEmployeeId(employeeId);
+    
+    // 获取工时数据
+    WorkhourSummary workhour = workhourService.getSummary(employeeId, month);
+    
+    // 计算应发工资 = 底薪 + 正常工时工资 + 加班工资
+    BigDecimal baseSalary = policy.getBaseSalary();
+    BigDecimal normalPay = workhour.getNormalHours().multiply(policy.getHourlyRate());
+    BigDecimal overtimePay = workhour.getOvertimeHours().multiply(policy.getOvertimeRate());
+    
+    // 计算实发工资 = 应发工资 - 扣款 - 借支
+    BigDecimal grossSalary = baseSalary.add(normalPay).add(overtimePay);
+    BigDecimal deduction = calculateDeduction(employeeId, month);
+    BigDecimal advanceDeduction = getAdvanceDeduction(employeeId, month);
+    BigDecimal netSalary = grossSalary.subtract(deduction).subtract(advanceDeduction);
+    
+    return new SalaryDetail(grossSalary, netSalary, ...);
+}
+```
+
+---
+
+## 🔐 安全规范（强制）
+
+### SQL注入防护（强制）
+
+**禁止拼接SQL**：
+```java
+// ❌ 禁止：字符串拼接SQL
+String sql = "SELECT * FROM employee WHERE name = '" + name + "'"; // 有SQL注入风险
+
+// ✅ 正确：使用参数化查询
+@Select("SELECT * FROM employee WHERE name = #{name}")
+Employee getByName(@Param("name") String name);
+```
+
+### 密码加密（强制）
+
+**禁止明文存储密码**：
+```java
+// ❌ 禁止：明文存储
+user.setPassword(rawPassword); // 禁止
+
+// ✅ 正确：BCrypt加密
+String encodedPassword = passwordEncoder.encode(rawPassword);
+user.setPassword(encodedPassword);
+```
+
+### 数据脱敏（强制）
+
+**敏感数据必须脱敏**：
+```java
+// 身份证：显示前3位和后4位，中间用*代替
+// 330123199001011234 -> 330***********1234
+
+// 手机号：显示前3位和后4位
+// 13812345678 -> 138****5678
+
+// 银行卡：显示后4位
+// 6217001234567890123 -> ***************0123
+```
+
+### 日志安全（强制）
+
+**禁止在日志中输出敏感信息**：
+```java
+// ❌ 禁止：日志中输出密码、身份证、银行卡
+log.info("用户登录：{}", user); // user中可能包含密码
+
+// ✅ 正确：只输出必要信息，敏感信息脱敏
+log.info("用户登录：userId={}, username={}", user.getId(), user.getUsername());
+```
+
+---
+
+## 🎨 前端规范（强制）
+
+### Vue 3代码规范
+
+**组件命名**：
+```javascript
+// ✅ 正确：大驼峰
+EmployeeList.vue
+EmployeeDetail.vue
+
+// ❌ 错误：小写或下划线
+employee-list.vue
+employee_list.vue
+```
+
+**变量命名**：
+```javascript
+// ✅ 正确：小驼峰
+const employeeName = 'xxx'
+const maxRetryCount = 3
+
+// ❌ 错误：其他形式
+const EmployeeName = 'xxx'
+const max_retry_count = 3
+```
+
+### 接口调用规范（强制）
+
+**统一使用axios封装的API**：
+```javascript
+// ✅ 正确：使用封装的API
+import { getEmployeeList } from '@/api/employee'
+
+const fetchData = async () => {
+  const res = await getEmployeeList({ page: 1, size: 20 })
+  // 处理数据
+}
+
+// ❌ 错误：直接用axios
+axios.get('/api/employee/list?page=1&size=20')
+```
+
+---
+
+## 🌐 API接口规范（强制）
+
+### RESTful风格（强制）
+
+```
+GET    /api/employees          # 查询员工列表
+GET    /api/employees/{id}     # 查询员工详情
+POST   /api/employees          # 新增员工
+PUT    /api/employees/{id}     # 修改员工
+DELETE /api/employees/{id}     # 删除员工
+```
+
+### 统一响应格式（强制）
+
+**成功响应**：
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": { ... },
+  "timestamp": 1697520000000
+}
+```
+
+**失败响应**：
+```json
+{
+  "code": 400,
+  "message": "参数错误：员工姓名不能为空",
+  "data": null,
+  "timestamp": 1697520000000
+}
+```
+
+### 错误码规范（强制）
+
+| 错误码 | 说明 | 何时使用 |
+|--------|------|---------|
+| **200** | 成功 | 请求成功 |
+| **400** | 参数错误 | 客户端参数不合法 |
+| **401** | 未登录 | 用户未登录或token过期 |
+| **403** | 无权限 | 用户无权访问该资源 |
+| **404** | 资源不存在 | 请求的资源不存在 |
+| **500** | 服务器错误 | 服务器内部错误 |
+
+---
+
+## 🧪 测试规范（强制）
+
+### 单元测试覆盖率（强制）
+
+- ✅ 核心业务逻辑必须有单元测试
+- ✅ 覆盖率目标：≥80%
+- ✅ 使用JUnit 5 + Mockito
+
+**必须测试的场景**：
+1. 工资计算逻辑
+2. 返费计算逻辑
+3. 撞单判断逻辑
+4. 达标判断逻辑
+
+### 测试用例编写规范
+
+```java
+@Test
+@DisplayName("工资计算：正常工时 + 加班工时")
+public void testCalculateSalary_NormalAndOvertime() {
+    // Given（准备数据）
+    Long employeeId = 1L;
+    String month = "2024-10";
+    
+    // When（执行操作）
+    SalaryDetail result = salaryService.calculateSalary(employeeId, month);
+    
+    // Then（验证结果）
+    assertEquals(new BigDecimal("5500.00"), result.getGrossSalary());
+    assertEquals(new BigDecimal("5000.00"), result.getNetSalary());
+}
+```
+
+---
+
+## 📦 Git规范（强制）
+
+### 分支管理
+
+```
+main          # 主分支（生产环境）
+develop       # 开发分支（测试环境）
+feature/xxx   # 功能分支（开发中）
+hotfix/xxx    # 紧急修复分支
+```
+
+### Commit规范
+
+```
+feat: 新增员工管理模块
+fix: 修复工资计算精度问题
+docs: 更新API文档
+style: 代码格式化
+refactor: 重构返费计算逻辑
+test: 增加单元测试
+chore: 更新依赖版本
+```
+
+**Commit消息格式**：
+```
+<type>: <subject>
+
+<body>
+
+<footer>
+```
+
+**示例**：
+```
+fix: 修复工资计算中借支扣款未生效的问题
+
+问题描述：
+发工资时，借支金额未从工资中扣除
+
+修复方案：
+在工资计算时，调用getAdvanceDeduction()获取借支金额并扣除
+
+影响范围：
+SalaryService.calculateSalary()方法
+
+测试情况：
+已通过单元测试和集成测试
+
+Closes #123
+```
+
+---
+
+## 🚫 严格禁止事项
+
+### 代码层面
+
+❌ **绝对禁止**：
+1. 在Controller层写业务逻辑
+2. 使用double/float存储金额
+3. SQL语句拼接（必须用参数化查询）
+4. 密码明文存储
+5. 在日志中输出密码、身份证、银行卡
+6. 硬编码（魔法数字、魔法字符串）
+7. 捕获异常后不处理（空catch块）
+8. 返回null（应返回Optional或空集合）
+
+### 数据库层面
+
+❌ **绝对禁止**：
+1. 直接操作生产数据库（必须通过应用）
+2. 删除业务表的`tenant_id`字段
+3. 不加WHERE条件的UPDATE/DELETE
+4. 使用SELECT * （必须指定字段）
+5. 不加索引的查询（超过1000条记录）
+
+### Git层面
+
+❌ **绝对禁止**：
+1. 直接push到main分支
+2. 强制push（git push -f）到共享分支
+3. Commit包含密码、密钥等敏感信息
+4. Commit消息写"修复bug"、"test"等无意义内容
+
+---
+
+## ⚡ 性能规范（强制）
+
+### 查询优化
+
+**必须加索引的字段**：
+1. `tenant_id`（所有业务表）
+2. `created_at`（时间范围查询）
+3. `status`（状态查询）
+4. 外键字段
+5. 频繁作为WHERE条件的字段
+
+**N+1查询问题**：
+```java
+// ❌ 错误：N+1查询
+List<Employee> employees = employeeMapper.selectAll();
+for (Employee emp : employees) {
+    Project project = projectMapper.selectById(emp.getProjectId()); // N次查询
+}
+
+// ✅ 正确：使用JOIN或批量查询
+List<EmployeeVO> employees = employeeMapper.selectAllWithProject(); // 1次查询
+```
+
+### 缓存策略
+
+**必须缓存的数据**：
+1. 字典数据（数据字典、配置项）
+2. 用户权限信息
+3. 热点数据（经常查询的数据）
+
+**缓存Key命名规范**：
+```
+{业务模块}:{数据类型}:{ID}
+
+示例：
+employee:basic:1001
+salary:policy:1001
+dict:position:all
+```
+
+---
+
+## 📊 监控与日志规范（强制）
+
+### 日志级别
+
+| 级别 | 使用场景 |
+|------|---------|
+| **ERROR** | 系统错误、异常 |
+| **WARN** | 警告信息（如缓存未命中、接口超时） |
+| **INFO** | 关键业务节点（如登录、下单、支付） |
+| **DEBUG** | 调试信息（开发环境） |
+
+### 日志格式
+
+```java
+// ✅ 正确：结构化日志
+log.info("员工入职：employeeId={}, name={}, projectId={}", 
+    employeeId, name, projectId);
+
+// ❌ 错误：非结构化日志
+log.info("员工" + name + "入职了");
+```
+
+### 监控指标
+
+**必须监控的指标**：
+1. API响应时间（P50、P95、P99）
+2. 数据库慢查询（>1秒）
+3. 缓存命中率
+4. 系统错误率
+5. 并发用户数
+
+---
+
+## 🔄 数据一致性规范（强制）
+
+### 事务管理
+
+**必须使用事务的场景**：
+1. 工资发放（工资表 + 借支扣款）
+2. 员工离职（员工状态 + 借支结算 + 返费判定）
+3. 返费结算（返费记录 + 渠道账户）
+
+```java
+@Transactional(rollbackFor = Exception.class)
+public void releaseSalary(Long employeeId, String month) {
+    // 1. 生成工资记录
+    salaryMapper.insert(salary);
+    
+    // 2. 扣除借支
+    advanceService.deduct(employeeId, month);
+    
+    // 3. 发放记录
+    paymentMapper.insert(payment);
+}
+```
+
+### 分布式锁
+
+**必须使用分布式锁的场景**：
+1. 防止重复报名（撞单检查）
+2. 防止重复发放工资
+3. 防止重复结算返费
+
+```java
+String lockKey = "employee:enroll:" + idCard;
+if (redisLock.tryLock(lockKey, 10, TimeUnit.SECONDS)) {
+    try {
+        // 检查是否已报名
+        // 插入报名记录
+    } finally {
+        redisLock.unlock(lockKey);
+    }
+}
+```
+
+---
+
+## 📝 文档规范（强制）
+
+### 必须编写的文档
+
+1. ✅ API接口文档（Swagger自动生成）
+2. ✅ 数据库设计文档（ER图、表结构）
+3. ✅ 部署文档（环境配置、部署步骤）
+4. ✅ 核心业务逻辑文档（工资计算、返费计算）
+
+### 文档更新规则
+
+- 代码变更后，必须同步更新文档
+- 接口变更必须通知前端
+- 数据库变更必须记录变更日志
+
+---
+
+## 🎯 核心技术约束总结
+
+### 金额计算（核心红线）
+
+✅ **必须**：
+- 数据库用`DECIMAL(10,2)`
+- Java用`BigDecimal`
+- 计算时用`add()`、`subtract()`、`multiply()`、`divide()`
+- 前端显示格式化为"¥X,XXX.XX"
+
+❌ **禁止**：
+- 用double/float
+- 用字符串计算
+- 直接用+、-、*、/运算符
+
+### 多租户隔离（核心红线）
+
+✅ **必须**：
+- 所有业务表有`tenant_id`字段
+- 所有查询自动注入`WHERE tenant_id = ?`
+- 使用MyBatis Plus租户插件
+- 100%保证数据隔离
+
+❌ **禁止**：
+- 跨租户查询
+- 手动拼接`tenant_id`条件
+- 绕过租户插件
+
+---
+
+**最后更新**：2026年10月17日  
+**维护人**：技术负责人  
+**强制等级**：所有约束必须100%遵守

@@ -1,0 +1,188 @@
+name: Deploy
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        type: choice
+        options:
+          - dev
+          - test
+          - staging
+          - prod
+
+jobs:
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'prod' }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: 'maven'
+
+    - name: Build application
+      run: |
+        cd backend
+        mvn clean package -DskipTests
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Docker Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ secrets.DOCKER_REGISTRY }}
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Extract version
+      id: version
+      run: |
+        if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${{ github.event.inputs.environment }}-$(date +%Y%m%d-%H%M%S)" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        file: ./infrastructure/docker/Dockerfile.backend
+        push: true
+        tags: |
+          ${{ secrets.DOCKER_REGISTRY }}/labor-backend:${{ steps.version.outputs.version }}
+          ${{ secrets.DOCKER_REGISTRY }}/labor-backend:latest
+        cache-from: type=registry,ref=${{ secrets.DOCKER_REGISTRY }}/labor-backend:buildcache
+        cache-to: type=registry,ref=${{ secrets.DOCKER_REGISTRY }}/labor-backend:buildcache,mode=max
+
+    - name: Deploy to server
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.DEPLOY_HOST }}
+        username: ${{ secrets.DEPLOY_USER }}
+        key: ${{ secrets.DEPLOY_SSH_KEY }}
+        port: ${{ secrets.DEPLOY_PORT }}
+        script: |
+          cd /opt/labor-intermediaries
+          docker-compose pull backend
+          docker-compose up -d backend
+          docker-compose logs -f --tail=100 backend
+
+    - name: Health check
+      run: |
+        sleep 30
+        curl -f ${{ secrets.BACKEND_URL }}/actuator/health || exit 1
+
+    - name: Notify deployment
+      if: always()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        text: |
+          Backend deployment ${{ job.status }}
+          Version: ${{ steps.version.outputs.version }}
+          Environment: ${{ github.event.inputs.environment || 'prod' }}
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'prod' }}
+    needs: deploy-backend
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: 'frontend/web-admin/package-lock.json'
+
+    - name: Build Web Admin
+      env:
+        VITE_API_BASE_URL: ${{ secrets.API_BASE_URL }}
+      run: |
+        cd frontend/web-admin
+        npm ci
+        npm run build
+
+    - name: Deploy to CDN/Server
+      uses: appleboy/scp-action@v0.1.4
+      with:
+        host: ${{ secrets.DEPLOY_HOST }}
+        username: ${{ secrets.DEPLOY_USER }}
+        key: ${{ secrets.DEPLOY_SSH_KEY }}
+        port: ${{ secrets.DEPLOY_PORT }}
+        source: "frontend/web-admin/dist/*"
+        target: "/var/www/labor-admin"
+        strip_components: 3
+
+    - name: Reload Nginx
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.DEPLOY_HOST }}
+        username: ${{ secrets.DEPLOY_USER }}
+        key: ${{ secrets.DEPLOY_SSH_KEY }}
+        port: ${{ secrets.DEPLOY_PORT }}
+        script: |
+          sudo nginx -t
+          sudo systemctl reload nginx
+
+    - name: Notify deployment
+      if: always()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        text: |
+          Frontend deployment ${{ job.status }}
+          Environment: ${{ github.event.inputs.environment || 'prod' }}
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  rollback:
+    name: Rollback (Manual)
+    runs-on: ubuntu-latest
+    if: failure()
+    needs: [deploy-backend, deploy-frontend]
+    environment: rollback
+
+    steps:
+    - name: Rollback backend
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.DEPLOY_HOST }}
+        username: ${{ secrets.DEPLOY_USER }}
+        key: ${{ secrets.DEPLOY_SSH_KEY }}
+        port: ${{ secrets.DEPLOY_PORT }}
+        script: |
+          cd /opt/labor-intermediaries
+          docker-compose down backend
+          docker tag ${{ secrets.DOCKER_REGISTRY }}/labor-backend:previous ${{ secrets.DOCKER_REGISTRY }}/labor-backend:latest
+          docker-compose up -d backend
+
+    - name: Notify rollback
+      uses: 8398a7/action-slack@v3
+      with:
+        status: custom
+        custom_payload: |
+          {
+            text: '⚠️ Deployment failed, rollback initiated',
+            color: 'warning'
+          }
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}

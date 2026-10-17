@@ -1,0 +1,138 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-ci.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'frontend/**'
+
+jobs:
+  web-admin:
+    name: Web Admin CI
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: 'frontend/web-admin/package-lock.json'
+
+    - name: Install dependencies
+      run: |
+        cd frontend/web-admin
+        npm ci
+
+    - name: Lint code
+      run: |
+        cd frontend/web-admin
+        npm run lint
+
+    - name: Type check
+      run: |
+        cd frontend/web-admin
+        npm run type-check
+
+    - name: Run unit tests
+      run: |
+        cd frontend/web-admin
+        npm run test:unit
+
+    - name: Build application
+      run: |
+        cd frontend/web-admin
+        npm run build
+
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: web-admin-dist
+        path: frontend/web-admin/dist
+        retention-days: 7
+
+  mobile-app:
+    name: Mobile App CI
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.x'
+        channel: 'stable'
+
+    - name: Get dependencies
+      run: |
+        cd frontend/mobile-app
+        flutter pub get
+
+    - name: Analyze code
+      run: |
+        cd frontend/mobile-app
+        flutter analyze
+
+    - name: Run tests
+      run: |
+        cd frontend/mobile-app
+        flutter test
+
+    - name: Build APK
+      run: |
+        cd frontend/mobile-app
+        flutter build apk --release
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: mobile-app-apk
+        path: frontend/mobile-app/build/app/outputs/flutter-apk/app-release.apk
+        retention-days: 7
+
+  mini-program:
+    name: Mini Program CI
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: 'frontend/mini-program/package-lock.json'
+
+    - name: Install dependencies
+      run: |
+        cd frontend/mini-program
+        npm ci
+
+    - name: Lint code
+      run: |
+        cd frontend/mini-program
+        npm run lint
+
+    - name: Build for WeChat
+      run: |
+        cd frontend/mini-program
+        npm run build:mp-weixin
+
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: mini-program-dist
+        path: frontend/mini-program/dist/build/mp-weixin
+        retention-days: 7
