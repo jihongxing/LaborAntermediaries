@@ -15,7 +15,7 @@
 | **Java** | JDK 17+ | 开发语言 | LTS版本，稳定可靠 |
 | **Spring Boot** | 3.2+ | 开发框架 | 主流框架，生态完善 |
 | **MyBatis Plus** | 3.5+ | ORM框架 | 代码生成，提高效率 |
-| **MySQL** | 8.0+ | 关系数据库 | 主流数据库，性能稳定 |
+| **PostgreSQL** | 16+ | 关系数据库 | 企业级数据库，强大的JSON/事务/分区支持 |
 | **Redis** | 7.0+ | 缓存 | 缓存、分布式锁 |
 | **RabbitMQ** | 3.12+ | 消息队列 | 异步处理 |
 
@@ -46,14 +46,36 @@
 
 ```sql
 CREATE TABLE xxx (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
-  tenant_id BIGINT NOT NULL COMMENT '租户ID（必须）',
-  ...其他字段...
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  deleted_at TIMESTAMP NULL COMMENT '删除时间（软删除）',
-  INDEX idx_tenant_id (tenant_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  id BIGSERIAL PRIMARY KEY,
+  tenant_id BIGINT NOT NULL,
+  -- 其他字段...
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  deleted_at TIMESTAMPTZ
+);
+
+-- 必须添加的索引和约束
+CREATE INDEX idx_xxx_tenant_id ON xxx(tenant_id);
+COMMENT ON TABLE xxx IS '表描述';
+COMMENT ON COLUMN xxx.id IS '主键';
+COMMENT ON COLUMN xxx.tenant_id IS '租户ID（必须）';
+COMMENT ON COLUMN xxx.created_at IS '创建时间';
+COMMENT ON COLUMN xxx.updated_at IS '更新时间';
+COMMENT ON COLUMN xxx.deleted_at IS '删除时间（软删除）';
+
+-- 自动更新updated_at的触发器
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_xxx_updated_at 
+  BEFORE UPDATE ON xxx
+  FOR EACH ROW 
+  EXECUTE FUNCTION update_updated_at_column();
 ```
 
 **强制要求**：
@@ -67,11 +89,11 @@ CREATE TABLE xxx (
 所有表必须包含以下字段：
 
 ```sql
-id BIGINT PRIMARY KEY AUTO_INCREMENT,
-tenant_id BIGINT NOT NULL COMMENT '租户ID',
-created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-deleted_at TIMESTAMP NULL COMMENT '软删除时间'
+id BIGSERIAL PRIMARY KEY,
+tenant_id BIGINT NOT NULL,
+created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+deleted_at TIMESTAMPTZ
 ```
 
 ### 命名规范（强制）
@@ -88,15 +110,16 @@ deleted_at TIMESTAMP NULL COMMENT '软删除时间'
 
 | 数据类型 | 数据库类型 | Java类型 | 说明 |
 |---------|-----------|---------|------|
-| **主键** | `BIGINT` | `Long` | 统一用BIGINT，不用INT |
-| **金额** | `DECIMAL(10,2)` | `BigDecimal` | **必须用DECIMAL，禁止用DOUBLE** |
-| **日期时间** | `TIMESTAMP` | `LocalDateTime` | 不用DATETIME |
-| **布尔** | `TINYINT(1)` | `Boolean` | 0=false, 1=true |
+| **主键** | `BIGSERIAL` | `Long` | PostgreSQL自增主键 |
+| **金额** | `NUMERIC(10,2)` | `BigDecimal` | **必须用NUMERIC，禁止用DOUBLE PRECISION** |
+| **日期时间** | `TIMESTAMPTZ` | `LocalDateTime` | 带时区的时间戳 |
+| **布尔** | `BOOLEAN` | `Boolean` | PostgreSQL原生布尔类型 |
 | **字符串** | `VARCHAR(N)` | `String` | 根据实际长度设置 |
 | **长文本** | `TEXT` | `String` | 超过500字符用TEXT |
+| **JSON数据** | `JSONB` | `String` / `JsonNode` | 半结构化数据，支持索引 |
 
 **金额字段的严格要求**：
-- ✅ 数据库必须用`DECIMAL(10,2)`
+- ✅ 数据库必须用`NUMERIC(10,2)`
 - ✅ Java必须用`BigDecimal`，**禁止用double/float**
 - ✅ 前端显示必须格式化为"¥X,XXX.XX"
 
@@ -111,6 +134,19 @@ double result = salary - deduction; // 2390.1999999999998
 BigDecimal salary = new BigDecimal("2490.50");
 BigDecimal deduction = new BigDecimal("100.30");
 BigDecimal result = salary.subtract(deduction); // 2390.20
+```
+
+**PostgreSQL金额字段最佳实践**：
+```sql
+-- ✅ 正确：使用NUMERIC
+salary NUMERIC(10,2) NOT NULL,
+
+-- ❌ 错误：使用DOUBLE PRECISION
+salary DOUBLE PRECISION NOT NULL  -- 有精度问题
+
+-- ✅ 添加CHECK约束防止负数
+ALTER TABLE salary_record ADD CONSTRAINT check_salary_positive 
+  CHECK (gross_salary >= 0 AND net_salary >= 0);
 ```
 
 ---
@@ -615,13 +651,13 @@ if (redisLock.tryLock(lockKey, 10, TimeUnit.SECONDS)) {
 ### 金额计算（核心红线）
 
 ✅ **必须**：
-- 数据库用`DECIMAL(10,2)`
+- 数据库用`NUMERIC(10,2)`
 - Java用`BigDecimal`
 - 计算时用`add()`、`subtract()`、`multiply()`、`divide()`
 - 前端显示格式化为"¥X,XXX.XX"
 
 ❌ **禁止**：
-- 用double/float
+- 用double/float或DOUBLE PRECISION
 - 用字符串计算
 - 直接用+、-、*、/运算符
 
