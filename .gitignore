@@ -280,3 +280,4 @@ tools/backup/*.zip
 
 # 保留Gradle Wrapper
 !gradle/wrapper/gradle-wrapper.jar
+.gstack/
