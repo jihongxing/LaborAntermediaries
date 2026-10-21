@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="独立测算用工方组织层面的履约管理费分享金额、费率档位及合作条件。">
+  <title>用工方收益与合作价值模拟器 V1</title>
+  <style>
+    :root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;color:#17251f;background:#f3f6f3;--green:#146b4a;--muted:#65746c;--line:#dce5de;--mint:#e5f3eb}*{box-sizing:border-box}body{margin:0}main{max-width:1160px;margin:auto;padding:32px 22px 56px}h1{font-size:32px;letter-spacing:-.03em;margin:8px 0 12px}h2{font-size:21px;margin:0 0 8px}h3{font-size:16px;margin:0 0 10px}p{line-height:1.7}header{display:flex;justify-content:space-between;gap:24px;margin-bottom:22px}.eyebrow{color:var(--green);font-size:12px;font-weight:700;letter-spacing:.1em}.intro{max-width:740px;color:var(--muted);margin:0}.actions{display:flex;gap:8px;align-items:flex-start;flex-shrink:0}button,.link-button{font:inherit;display:inline-block;padding:10px 14px;border:1px solid var(--line);border-radius:9px;background:white;color:#17251f;text-decoration:none;cursor:pointer}button:hover,.link-button:hover{border-color:var(--green);background:#f0f7f2}button:active,.link-button:active{background:var(--mint)}:focus-visible{outline:3px solid #86bfa4;outline-offset:3px}section{margin-top:28px}.panel{background:white;border:1px solid var(--line);border-radius:14px;padding:20px;margin-top:14px}.sub{font-size:13px;color:var(--muted);margin:0 0 14px}.notice{background:#fff8ed;color:#704b20;border:1px solid #ead6b5;padding:13px 16px;border-radius:10px;font-size:13px;line-height:1.7}.fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}label{display:block;font-size:12px;font-weight:700;margin-bottom:8px}input,select{font:inherit;padding:11px;border:1px solid #ccd8d0;border-radius:8px;width:100%;background:white;color:#17251f;min-width:0}input[aria-invalid=true],select[aria-invalid=true]{border-color:#a63c35}small{display:block;color:var(--muted);font-size:12px;line-height:1.6;margin-top:6px}.rule{background:#f6f8f6;border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.7;margin-top:16px}.error{color:#a63c35;font-size:14px;margin-top:12px}.error:empty{display:none}.hero-results{display:grid;grid-template-columns:1fr 1fr;gap:16px}.result{background:#123f30;color:white;padding:22px;border-radius:12px}.result span{font-size:13px;color:#c7e3d2}.result strong{display:block;font-size:32px;letter-spacing:-.03em;margin:8px 0;font-variant-numeric:tabular-nums}.result small{color:#c7e3d2}.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums}th,td{padding:13px 12px;border-bottom:1px solid #edf1ee;text-align:right}th{font-size:12px;color:var(--muted);background:#f6f8f6}th:first-child,td:first-child{text-align:left}td small{font-size:11px}.data{min-width:560px}.tiers{min-width:840px}.current{background:var(--mint);font-weight:700}.current td:first-child{color:var(--green)}caption{text-align:left;font-weight:700;margin-bottom:12px}.compare-title{color:var(--green);font-size:12px;font-weight:700;margin-top:24px}.formula{font-size:13px;color:var(--muted);line-height:1.8;margin:16px 0 0}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}.steps{margin:0;padding-left:22px}.steps li{line-height:1.8;padding:5px 0}.facts{margin:0;padding-left:20px;font-size:14px;line-height:1.9}.status{font-size:12px;color:var(--green);margin-top:10px}footer{border-top:1px solid var(--line);margin-top:28px;padding-top:18px;color:var(--muted);font-size:12px;line-height:1.8}footer a{color:var(--green)}[hidden]{display:none!important}
+    @media(max-width:760px){main{padding:22px 14px 40px}header{display:block}h1{font-size:26px}.actions{margin-top:18px;flex-wrap:wrap}.fields{grid-template-columns:1fr 1fr}.two-col{grid-template-columns:1fr}.panel{padding:16px}th,td{padding:12px 8px;font-size:12px}.result strong{font-size:27px}}
+    @media(max-width:420px){.hero-results{grid-template-columns:1fr}.fields{grid-template-columns:1fr}.result{padding:18px}}
+    @media print{body{background:white}main{max-width:none;padding:0}.actions,.link-button{display:none}.panel{break-inside:avoid;box-shadow:none}.table-wrap{overflow:visible}.tiers{min-width:0;font-size:10px}.tiers td,.tiers th{padding:7px 4px}.result{background:white;color:#17251f;border:1px solid var(--line)}.result span,.result small{color:#65746c}header{display:block}}
+  </style>
+</head>
+<body>
+<main>
+  <header><div><div class="eyebrow">劳务供应链 · 用工方独立测算</div><h1>用工方收益与合作价值模拟器</h1><p class="intro">算清组织可分享多少，需要配合什么，再用供应商经济账验证合作空间。这里测算的是可分享金额，不是个人奖励，也不是已到账收入。</p></div><div class="actions"><button id="resetButton" type="button">重置默认值</button><button id="printButton" type="button">打印 / 存为PDF</button></div></header>
+  <div class="notice">供应商承担履约管理费，用工方原则上不付平台费。测算金额不代表已到账收入，实际收取、分享与结算以双方最终签订的合同及经核验账单为准，不构成收益承诺。</div>
+  <section aria-labelledby="inputsTitle"><h2 id="inputsTitle">项目测算条件</h2><p class="sub">只有这里可以输入或选择。以下金额、对照及档位表全部实时计算；不读取或覆盖其他模拟器的数据。</p><div class="panel"><div class="fields">
+    <div><label for="workers">月均实际履约人数（人）</label><select id="workers"></select><small>100–1,000人，每100人一档；不是招标计划人数。</small></div>
+    <div><label for="effectiveDays">每人每月有效履约天数（天）</label><input id="effectiveDays" type="number" min="0" max="31" step="0.5"><small>可输入半天；以合同和实际核验口径为准。</small></div>
+    <div><label for="fee">平台管理费（元/有效履约人天）</label><select id="fee"></select><small>用工方主导确认，应标前向供应商明确披露。</small></div>
+    <div><label for="months">年度实际履约月份（个月）</label><select id="months"></select><small>年度测算假设所选月份的业务规模保持一致。</small></div>
+  </div><div class="rule" id="ruleText"></div><div id="errorMessage" class="error" role="alert"></div></div></section>
+  <div id="results">
+    <section aria-labelledby="businessTitle"><h2 id="businessTitle">上 · 项目规模与收费去向</h2><p class="sub">供应商支付的管理费总额不等于用工方收益；平台留存也不等于平台利润。</p><div class="panel table-wrap"><table class="data"><thead><tr><th scope="col">共同业务指标</th><th scope="col">月度</th><th scope="col" id="annualHeading"></th></tr></thead><tbody id="businessRows"></tbody></table></div></section>
+    <section aria-labelledby="benefitTitle"><h2 id="benefitTitle">中 · 用工方新增可分享金额</h2><p class="sub">仅比较本平台机制，不把用工方已有的其他收益视为零，也不把可分享金额称为净利润。</p><div class="hero-results" aria-live="polite" aria-atomic="true"><div class="result"><span>月度可分享金额</span><strong id="monthlyBenefit"></strong><small>组织层面的测算金额，非已到账收益</small></div><div class="result"><span id="annualBenefitLabel"></span><strong id="annualBenefit"></strong><small>按所选实际履约月份累计，不默认所有项目全年履约</small></div></div><div class="panel"><h3>每月对照</h3><div class="table-wrap"><table class="data"><thead><tr><th scope="col">本机制指标</th><th scope="col">不接入本平台机制</th><th scope="col">接入本平台机制</th></tr></thead><tbody id="monthlyRows"></tbody></table></div><h3 class="compare-title" id="annualCompareTitle"></h3><div class="table-wrap"><table class="data"><thead><tr><th scope="col">本机制指标</th><th scope="col">不接入本平台机制</th><th scope="col">接入本平台机制</th></tr></thead><tbody id="annualRows"></tbody></table></div><p id="formulaText" class="formula"></p></div></section>
+    <section aria-labelledby="tiersTitle"><h2 id="tiersTitle">下 · 费率选择与合作成立条件</h2><p class="sub">下表全部按当前项目规模计算，绿色行仅代表当前选择，不代表推荐最高费率。</p><div class="panel table-wrap"><table class="tiers"><caption>各档位收益与供应商费用对照</caption><thead><tr><th scope="col">管理费档位<br>元/人天</th><th scope="col">用工方分享<br>元/人天</th><th scope="col">用工方月度分享</th><th scope="col" id="tierAnnualHeading"></th><th scope="col">供应商月度管理费</th></tr></thead><tbody id="tierRows"></tbody></table></div><p class="notice">管理费越高，用工方可分享金额越高，供应商费用也越高。应结合供应商工价、渠道成本、保险和账期判断可合作空间，不以分享金额最大化作为选档依据。</p></section>
+  </div>
+  <section aria-labelledby="cooperationTitle"><h2 id="cooperationTitle">合作如何落地</h2><div class="two-col"><article class="panel"><h3>用工方需要配合什么</h3><ol class="steps"><li>确认项目规则、适用主体与费率档位。</li><li>在供应商应标前披露费用和计费规则。</li><li>组织实际履约数据采集、审核与人天核验。</li><li>核对管理费账单，处理异常及争议。</li><li>待结算安排获批后，依组织授权和合同结算分享。</li></ol><small>收益来自真实履约及核验，不是发布需求即产生。不得中标后追溯提高费率。</small></article><article class="panel"><h3>供应商是否仍有合理利润？</h3><p class="sub">本页只知道供应商将承担多少平台费，不掌握供应商全部收入和成本，因此不直接判断“仍然盈利”。请在已验收的独立供应商模拟器中核对收费前后的经营结余及资金回报。</p><a class="link-button" href="./劳务派遣毛利与资金回报模拟器-v1.html" target="_blank" rel="noopener">打开供应商利润模拟器 ↗</a><p id="supplierReference" class="formula"></p><small>V1不自动传参，不读取、不覆盖供应商模拟器输入；其工价、成本及账期须另行确认。</small></article></div></section>
+  <section aria-labelledby="boundariesTitle"><h2 id="boundariesTitle">这份测算没有计入什么</h2><div class="panel"><ul class="facts"><li>账期价值：未比较接入前后付款安排，不把原有账期便利计作平台新增收益。</li><li>保证金本金、线索销售、人事经理奖励、主观管理工时节省：不计入分享收益。</li><li>用工方接入成本、税费及其他未输入成本：尚未扣除，因此不是净利润测算。</li><li>供应商实际报价可能变化，本页不假设用工方采购成本必然不变，不宣称完整净收益。</li><li>实际履约人天以合同及核验为准；页面采用人数×有效履约天数的情景估算。</li></ul></div></section>
+  <p id="feedback" class="status" role="status"></p>
+  <footer>金额为人民币，最多显示两位小数。分享收益归属于签约用工方组织，实际支付以合同约定及结算条件为准，不代表个人奖励、自动到账或利润保证。本页可离线使用。</footer>
+</main>
+<script>
+  const BUYER_RULES = Object.freeze({ baseFeeCents: 50, buyerSharePercent: 60, feeStepCents: 50, maximumFeeCents: 500 });
+  const BUYER_DEFAULTS = Object.freeze({ workers: 1000, effectiveDays: 26, fee: 2, months: 12 });
+  const WORKER_TIERS = Array.from({ length: 10 }, (_, index) => (index + 1) * 100);
+  const FEE_TIERS = Array.from({ length: BUYER_RULES.maximumFeeCents / BUYER_RULES.feeStepCents }, (_, index) => (index + 1) * BUYER_RULES.feeStepCents / 100);
+  function calculateBuyer(rawInput) {
+    const input = {};
+    for (const key of Object.keys(BUYER_DEFAULTS)) {
+      const value = rawInput[key];
+      if (value === undefined || value === null || String(value).trim() === "" || !Number.isFinite(Number(value))) throw new RangeError("请完整填写项目测算条件，不能使用空值或无效数字。");
+      input[key] = Number(value);
+    }
+    if (!WORKER_TIERS.includes(input.workers)) throw new RangeError("人数请选择100至1,000人的100人档位。");
+    if (input.effectiveDays < 0 || input.effectiveDays > 31 || !Number.isInteger(input.effectiveDays * 2)) throw new RangeError("有效履约天数须为0至31天，每0.5天一档。");
+    if (!FEE_TIERS.includes(input.fee)) throw new RangeError("管理费须为0.5至5元，每0.5元一档。");
+    if (!Number.isInteger(input.months) || input.months < 1 || input.months > 12) throw new RangeError("年度履约月份请选择1至12个月。");
+    const monthlyPersonDays = input.workers * input.effectiveDays;
+    const amountAtFee = (fee) => {
+      const feeCents = Math.round(fee * 100);
+      const buyerPerDayCents = Math.max(0, feeCents - BUYER_RULES.baseFeeCents) * BUYER_RULES.buyerSharePercent / 100;
+      const monthlyFeeCents = monthlyPersonDays * feeCents;
+      const monthlyBuyerCents = monthlyPersonDays * buyerPerDayCents;
+      const monthlyPlatformCents = monthlyFeeCents - monthlyBuyerCents;
+      return { fee, buyerPerDayCents, monthlyFeeCents, monthlyBuyerCents, monthlyPlatformCents, annualFeeCents: monthlyFeeCents * input.months, annualBuyerCents: monthlyBuyerCents * input.months, annualPlatformCents: monthlyPlatformCents * input.months };
+    };
+    return { input, monthlyPersonDays, annualPersonDays: monthlyPersonDays * input.months, ...amountAtFee(input.fee), tiers: FEE_TIERS.map(amountAtFee) };
+  }
+  const moneyFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
+  const numberFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 });
+  const money = (cents) => `¥${moneyFormatter.format(cents / 100)}`;
+  const elements = Object.fromEntries(Object.keys(BUYER_DEFAULTS).map((key) => [key, document.getElementById(key)]));
+  function addOptions(id, values, suffix) {
+    for (const value of values) elements[id].add(new Option(`${numberFormatter.format(value)}${suffix}`, String(value)));
+  }
+  addOptions("workers", WORKER_TIERS, " 人");
+  addOptions("fee", FEE_TIERS, " 元/人天");
+  addOptions("months", Array.from({ length: 12 }, (_, index) => index + 1), " 个月");
+  document.getElementById("ruleText").textContent = `本页测算口径：管理费前${money(BUYER_RULES.baseFeeCents)} / 人天归平台；超出部分用工方分享${BUYER_RULES.buyerSharePercent}%，平台留存其余${100 - BUYER_RULES.buyerSharePercent}%。费率范围${money(BUYER_RULES.feeStepCents)}–${money(BUYER_RULES.maximumFeeCents)}，每${money(BUYER_RULES.feeStepCents)}一档。按经核验的实际有效履约人天计算，具体合作以合同约定为准。`;
+  function writeRows(id, rows) {
+    document.getElementById(id).innerHTML = rows.map(([label, ...values]) => `<tr><th scope="row">${label}</th>${values.map((value) => `<td>${value}</td>`).join("")}</tr>`).join("");
+  }
+  function renderBuyer(result) {
+    const { input } = result;
+    const text = (id, value) => { document.getElementById(id).textContent = value; };
+    text("annualHeading", `年度 · ${input.months}个履约月`);
+    text("annualBenefitLabel", `年度可分享金额 · ${input.months}个履约月`);
+    text("annualCompareTitle", `年度对照 · ${input.months}个履约月`);
+    text("tierAnnualHeading", `用工方年度分享（${input.months}个月）`);
+    writeRows("businessRows", [
+      ["有效履约人天", `${numberFormatter.format(result.monthlyPersonDays)} 人天`, `${numberFormatter.format(result.annualPersonDays)} 人天`],
+      ["供应商承担管理费总额", money(result.monthlyFeeCents), money(result.annualFeeCents)],
+      ["其中：用工方可分享金额", money(result.monthlyBuyerCents), money(result.annualBuyerCents)],
+      ["其中：平台留存（非利润）", money(result.monthlyPlatformCents), money(result.annualPlatformCents)],
+    ]);
+    text("monthlyBenefit", money(result.monthlyBuyerCents));
+    text("annualBenefit", money(result.annualBuyerCents));
+    for (const [id, amount] of [["monthlyRows", result.monthlyBuyerCents], ["annualRows", result.annualBuyerCents]]) writeRows(id, [
+      ["本机制产生的可分享金额", "无", money(amount)],
+      ["用工方直接支付的平台管理费", "不涉及", `${money(0)}（原则上）`],
+      ["本机制新增可分享金额", "无", money(amount)],
+    ]);
+    text("formulaText", `每人天分享＝（${money(Math.round(input.fee * 100))}－${money(BUYER_RULES.baseFeeCents)}）×${BUYER_RULES.buyerSharePercent}%＝${money(result.buyerPerDayCents)}。月度＝${numberFormatter.format(input.workers)}人×${numberFormatter.format(input.effectiveDays)}天×${money(result.buyerPerDayCents)}＝${money(result.monthlyBuyerCents)}；年度＝${money(result.monthlyBuyerCents)}×${input.months}个月＝${money(result.annualBuyerCents)}。假设实际履约全部通过核验，管理费按规则足额结算，尚未扣除用工方税费和接入成本。`);
+    document.getElementById("tierRows").innerHTML = result.tiers.map((tier) => `<tr${tier.fee === input.fee ? ' class="current" aria-current="true"' : ""}><th scope="row">${tier.fee.toFixed(1)}${tier.fee === input.fee ? " · 当前" : ""}</th><td>${money(tier.buyerPerDayCents)}</td><td>${money(tier.monthlyBuyerCents)}</td><td>${money(tier.annualBuyerCents)}</td><td>${money(tier.monthlyFeeCents)}</td></tr>`).join("");
+    text("supplierReference", `请手动核对同一项目条件：${numberFormatter.format(input.workers)}人、每月${numberFormatter.format(input.effectiveDays)}个有效履约日、管理费${money(Math.round(input.fee * 100))}/人天。本页年度采用${input.months}个履约月；供应商版采用连续12个月年度口径，非全年项目不要直接比较年度总额。`);
+  }
+  function updateBuyer() {
+    try {
+      const rawInput = Object.fromEntries(Object.entries(elements).map(([key, element]) => [key, element.value]));
+      const result = calculateBuyer(rawInput);
+      renderBuyer(result);
+      for (const element of Object.values(elements)) element.removeAttribute("aria-invalid");
+      document.getElementById("errorMessage").textContent = "";
+      document.getElementById("results").hidden = false;
+    } catch (error) {
+      document.getElementById("errorMessage").textContent = error.message;
+      document.getElementById("results").hidden = true;
+      for (const id of ["businessRows", "monthlyRows", "annualRows", "tierRows"]) document.getElementById(id).innerHTML = "";
+      for (const id of ["monthlyBenefit", "annualBenefit", "formulaText", "supplierReference"]) document.getElementById(id).textContent = "输入无效，暂无测算结果";
+    }
+  }
+  function resetBuyer() {
+    for (const [key, value] of Object.entries(BUYER_DEFAULTS)) elements[key].value = String(value);
+    updateBuyer();
+  }
+  for (const element of Object.values(elements)) {
+    element.addEventListener("input", () => { document.getElementById("feedback").textContent = ""; updateBuyer(); });
+    element.addEventListener("change", () => { document.getElementById("feedback").textContent = ""; updateBuyer(); });
+  }
+  document.getElementById("resetButton").addEventListener("click", () => { resetBuyer(); document.getElementById("feedback").textContent = "已恢复默认项目条件并重新计算。"; });
+  document.getElementById("printButton").addEventListener("click", () => window.print());
+  resetBuyer();
+</script>
+</body>
+</html>

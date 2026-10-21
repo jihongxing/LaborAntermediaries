@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="独立测算劳务派遣项目毛利、回款账期、工资垫资和收取平台管理费前后的资金回报。">
+  <title>劳务派遣毛利与资金回报模拟器 V1</title>
+  <style>
+    :root{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;color:#17251f;background:#f3f6f3;font-synthesis:none;text-rendering:optimizeLegibility;--ink:#17251f;--muted:#65746c;--line:#dce5de;--green:#146b4a;--mint:#e5f3eb;--amber:#bb6c20;--red:#a63c35;--card:#fff;--shadow:0 14px 36px #193a2710}
+    *{box-sizing:border-box}body{margin:0}button,input,select{font:inherit}.wrap{max-width:1220px;margin:0 auto;padding:28px 22px 64px}.hero{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;padding:26px 0 30px}.eyebrow{color:var(--green);font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.hero h1{font-size:clamp(28px,4vw,42px);letter-spacing:-.04em;margin:10px 0}.hero p{color:var(--muted);max-width:740px;line-height:1.7;margin:0}.actions{display:flex;gap:10px;flex-shrink:0}.button{border:1px solid var(--line);background:#fff;color:var(--ink);padding:10px 15px;border-radius:10px;font-weight:700;cursor:pointer}.button.primary{background:var(--green);color:white;border-color:var(--green)}.notice{border:1px solid #ead6b5;background:#fff8ed;color:#704b20;border-radius:12px;padding:13px 16px;line-height:1.6;margin-bottom:22px;font-size:13px}.section-title{display:flex;justify-content:space-between;align-items:end;gap:16px;margin:32px 0 14px}.section-title h2{font-size:21px;margin:0;letter-spacing:-.02em}.section-title p{margin:5px 0 0;color:var(--muted);font-size:13px}.inputs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.input-group,.panel,.metric,.scenario{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}.input-group{padding:19px}.input-group h3{font-size:14px;margin:0 0 15px;color:var(--green)}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.field label{display:block;font-size:12px;font-weight:700;color:#526159;margin-bottom:6px}.field input,.field select{width:100%;border:1px solid #ccd8d0;border-radius:9px;padding:10px;background:#fff;color:var(--ink);min-width:0}.field small{display:block;color:var(--muted);font-size:11px;margin-top:5px}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.metric{padding:17px 18px}.metric .label{font-size:12px;color:var(--muted);font-weight:700}.metric strong{display:block;font-variant-numeric:tabular-nums;font-size:clamp(20px,2.5vw,29px);margin:9px 0 5px;letter-spacing:-.04em}.metric small{color:var(--muted);font-size:11px;line-height:1.5}.metric.highlight{background:#123f30;color:white;border-color:#123f30}.metric.highlight .label,.metric.highlight small{color:#c7e3d2}.compare{display:grid;grid-template-columns:1fr 1fr;gap:14px}.scenario{padding:20px}.scenario.before{border-top:4px solid #6b8f78}.scenario.after{border-top:4px solid var(--green)}.scenario h3{margin:0 0 4px;font-size:17px}.scenario>p{margin:0 0 16px;color:var(--muted);font-size:12px}.stat-list{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}.stat{padding:11px 0;border-top:1px solid #edf1ee}.stat span{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}.stat strong{font-size:18px;font-variant-numeric:tabular-nums}.stat small{font-size:11px;color:var(--muted);margin-left:4px}.delta{font-size:12px;padding:12px 14px;background:var(--mint);border-radius:10px;line-height:1.6;margin-top:14px}.delta.negative{background:#fff0ed;color:#813d35}.panel{padding:20px;margin-top:14px}.chart-wrap{height:240px;position:relative}.chart-wrap svg{width:100%;height:100%;overflow:visible}.chart-caption{display:flex;gap:18px;align-items:center;color:var(--muted);font-size:12px;margin:8px 0 0}.legend{display:inline-flex;align-items:center;gap:6px}.dot{width:9px;height:9px;border-radius:50%;background:var(--green)}.dot.gray{background:#9aa9a0}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff}.data-table{border-collapse:collapse;width:100%;min-width:1120px;font-variant-numeric:tabular-nums;font-size:12px}.data-table th,.data-table td{padding:11px 12px;border-bottom:1px solid #edf1ee;text-align:right;white-space:nowrap}.data-table th{position:sticky;top:0;background:#f5f8f5;color:#536159;font-size:11px}.data-table td:first-child,.data-table th:first-child{text-align:left}.year-table{min-width:800px}.positive{color:var(--green)}.negative-text{color:var(--red)}.formula-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.formula{padding:14px;border-radius:11px;background:#f6f8f6}.formula strong{display:block;font-size:12px;margin-bottom:5px}.formula span{font-size:12px;line-height:1.6;color:var(--muted)}footer{color:var(--muted);font-size:11px;line-height:1.7;margin:24px 2px}.error{display:none;padding:12px 14px;color:#8a2e2e;background:#fff0f0;border:1px solid #ecc7c7;border-radius:10px;margin-top:14px}.error.visible{display:block}
+    @media(max-width:900px){.inputs{grid-template-columns:1fr 1fr}.metrics{grid-template-columns:repeat(2,1fr)}}@media(max-width:640px){.wrap{padding:18px 14px 44px}.hero{display:block;padding-top:10px}.actions{margin-top:18px}.inputs,.compare{grid-template-columns:1fr}.fields{gap:11px}.scenario{padding:17px}.stat-list{gap:0 10px}.stat strong{font-size:16px}.formula-grid{grid-template-columns:1fr}.section-title{align-items:flex-start;flex-direction:column}.metrics{gap:9px}.metric{padding:14px}.metric strong{font-size:21px}}
+    @media print{body{background:#fff}.wrap{max-width:none;padding:0}.actions{display:none}.input-group,.panel,.metric,.scenario{box-shadow:none;break-inside:avoid}.table-wrap{overflow:visible}.data-table{font-size:8px;min-width:0}.data-table th,.data-table td{padding:5px}.chart-wrap{height:180px}}
+    .ledger{margin-bottom:18px}.ledger-kicker{font-size:18px;font-weight:800;color:var(--green)}.ledger-context,.ledger-help{font-size:13px;line-height:1.75;color:var(--muted)}.ledger-help{margin:16px 0 0}.ledger-head,.ledger-row{display:grid;grid-template-columns:minmax(190px,1.2fr) repeat(2,minmax(0,1fr));gap:16px;align-items:center;padding:13px 16px}.ledger-head{background:#edf3ee;border-radius:8px;font-size:13px}.ledger-head strong,.ledger-value{text-align:right}.ledger-head strong:last-child{color:var(--green)}.ledger-row{border-bottom:1px solid var(--line);font-size:14px}.ledger-label{line-height:1.6}.ledger-value{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.ledger-value small{display:block;font-size:11px;color:var(--muted);font-weight:400;margin-top:5px;line-height:1.6}.ledger-row.key{background:var(--mint);font-weight:800}.ledger-row.key .ledger-value{font-size:19px}.ledger-group{font-size:15px;margin:26px 0 12px}.ledger-details{margin-top:18px}.ledger-details summary{cursor:pointer;padding:10px 0;color:var(--green);font-size:13px}.annual-ledger{margin-top:20px}
+    @media(max-width:640px){.ledger-head,.ledger-row{gap:10px;padding:12px 8px}.ledger-head{grid-template-columns:1fr 1fr}.ledger-head>span{grid-column:1/-1}.ledger-head strong{text-align:left}.ledger-row{grid-template-columns:1fr 1fr}.ledger-label{grid-column:1/-1;font-size:13px;font-weight:600}.ledger-value{text-align:left;font-size:14px}.ledger-row.key .ledger-value{font-size:17px}.ledger-context,.ledger-help{font-size:12px}.ledger-value::before{content:attr(data-caption);display:block;font-size:11px;font-weight:400;color:var(--muted);margin-bottom:5px}}
+    @media print{.ledger{break-inside:auto}.ledger-row{break-inside:avoid}.ledger-details{display:none}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="hero">
+      <div><div class="eyebrow">Supplier economics · V1</div><h1>劳务派遣毛利与资金回报模拟器</h1><p>站在供应商经营视角，先看项目原始毛利与资金回报，再看承担平台人天管理费后的利润、资金需求和回报变化。所有结果随业务参数实时更新。</p></div>
+      <div class="actions"><a class="button" href="./用工方收益与合作价值模拟器-v1.html" style="text-decoration:none">用工方模拟器 →</a><button class="button" id="resetButton" type="button">恢复默认值</button><button class="button primary" id="printButton" type="button">打印 / 导出 PDF</button></div>
+    </header>
+    <div class="notice"><strong>月度近似模型：</strong>客户回款账期与工资支付周期分别设置，均按 30 天折算为月度档位。客户账期 60 天表示当月收入在两个月后回款；工资周期 30 天表示当月工资当月支付，60 天表示当月工资延后一个月支付。管理费按当月核验人天当月结算。不是精确到日的现金流预测。</div>
+    <div class="error" id="errorMessage" role="alert"></div>
+
+    <section aria-labelledby="inputsTitle">
+      <div class="section-title"><div><h2 id="inputsTitle">项目测算条件</h2><p>默认值可编辑；单人经济账与项目规模会同步放大。</p></div></div>
+      <div class="inputs">
+        <article class="input-group"><h3>A · 业务规模与工时</h3><div class="fields">
+          <div class="field"><label for="workers">稳定工人规模（人）</label><select id="workers"></select><small>按100人递增，范围100–1000人</small></div>
+          <div class="field"><label for="workDaysPerMonth">每月工作天数（天）</label><input id="workDaysPerMonth" type="number" min="0" max="31" step="1"></div>
+          <div class="field"><label for="hoursPerDay">每日工作小时数（小时）</label><input id="hoursPerDay" type="number" min="0" max="24" step="0.5"></div>
+          <div class="field"><label for="wagePaymentDays">工资支付周期（天）</label><select id="wagePaymentDays"></select><small>与客户回款账期分开设置；每30天为一个档位</small></div>
+        </div></article>
+        <article class="input-group"><h3>B · 工价与成本</h3><div class="fields">
+          <div class="field"><label for="clientHourlyRate">向客户收取工价（元/人/小时）</label><input id="clientHourlyRate" type="number" min="0" step="0.1"></div>
+          <div class="field"><label for="workerHourlyRate">支付给工人工价（元/人/小时）</label><input id="workerHourlyRate" type="number" min="0" step="0.1"></div>
+          <div class="field"><label for="hiringChannelCostPerWorkerHour">招工/渠道成本（元/人/小时）</label><select id="hiringChannelCostPerWorkerHour"></select><small id="hiringChannelCostHint">按客户工价与工人工价差额提供0.1元递增档位</small></div>
+          <div class="field"><label for="accidentInsurancePerWorkerMonth">意外险单价（元/人/月）</label><input id="accidentInsurancePerWorkerMonth" type="number" min="0" step="0.1"><small>默认60元；用于计算下方固定运营费用的默认金额，不再额外扣除。</small></div>
+          <div class="field"><label for="monthlyFixedCost">固定运营费用（元/月）</label><input id="monthlyFixedCost" type="number" min="0" step="0.1"><small>默认＝稳定工人规模 × 意外险单价；随人数及保险单价联动，手动修改后保留自定义总额。按现有口径在毛利以下扣除，不重复计入工资或渠道成本。</small></div>
+        </div></article>
+        <article class="input-group"><h3>C · 资金与平台管理费</h3><div class="fields">
+          <div class="field"><label for="clientPaymentDays">客户回款账期（天）</label><input id="clientPaymentDays" type="number" min="0" max="3650" step="1"></div>
+          <div class="field"><label for="annualFinancingRate">融资年利率（%）</label><input id="annualFinancingRate" type="number" min="0" max="100" step="0.1"></div>
+          <div class="field"><label for="platformFeePerPersonDay">平台管理费（元/有效履约人天）</label><select id="platformFeePerPersonDay"></select><small>按项目核验的实际有效履约人天计费，由供应商承担。用工方分享不在该费用之外重复扣收；本页对比扣费前后的供应商经营结果，具体收费与结算以项目合同为准。</small></div>
+        </div></article>
+      </div>
+    </section>
+
+    <section aria-labelledby="overviewTitle"><div class="section-title"><div><h2 id="overviewTitle">经营结果概览</h2><p>收入和毛利是权责发生口径；回款与资金需求来自逐月现金流模拟。</p></div></div>
+      <div class="panel ledger"><div class="ledger-kicker">上 · 项目营业数据</div><p id="businessContext" class="ledger-context"></p><div class="ledger-head"><span>共同业务指标</span><strong>月度</strong><strong>年度 · 12个月</strong></div><div id="businessRows"></div><p class="ledger-help">年度工资成本是12个月劳动产生的累计成本，不是需要一次准备的本金。工资周转资金单独列于下方资金投入账；资金可滚动，成本仍逐月发生。</p></div>
+    </section>
+
+    <section aria-labelledby="compareTitle"><div class="section-title"><div><h2 id="compareTitle">收费前后 · 供应商经济账对照</h2><p>毛利口径不混入平台管理费；收费后的经营利润另列，便于判断供应商是否仍有合作利润空间。</p></div></div>
+      <div class="panel ledger"><div class="ledger-kicker">中 · 月度经营结果</div><p class="ledger-context">同一行逐项对照；平台费由供应商承担，用工方原则上不付平台费。</p><div class="ledger-head"><span>每月经营账</span><strong>不收管理费</strong><strong>收取管理费</strong></div><div id="monthlyComparisonRows"></div><p class="ledger-help" id="monthlyComparisonNote"></p></div>
+      <div class="panel ledger annual-ledger"><div class="ledger-kicker">下 · 年度经营与资金回报</div><p class="ledger-context">先看一年赚多少，再看需要投入多少滚动本金，最后看资金回报。</p><h3 class="ledger-group">年度经营账 · 12个月业务</h3><div class="ledger-head"><span>年度指标</span><strong>不收管理费</strong><strong>收取管理费</strong></div><div id="annualComparisonRows"></div><h3 class="ledger-group">资金投入账 · 周转本金不是全年累计成本</h3><div class="ledger-head"><span>资金与回报指标</span><strong>不收管理费</strong><strong>收取管理费</strong></div><div id="capitalComparisonRows"></div><p id="capitalFormula" class="ledger-help"></p><p class="ledger-help">融资成本沿用现有估算：各情景初始营运资金需求 × 融资年利率，假设该本金全年融资；月均利息为年估算 ÷ 12，并非实际逐月借款利息。回报利差按百分点展示，融资利率不是银行存款利率。</p><details class="ledger-details"><summary>查看原始毛利资金回报口径</summary><div id="grossReturnRows"></div><p class="ledger-help">原始毛利未扣固定运营费用、平台费和融资成本，不作为主要经营回报结论。</p></details><p class="delta" id="comparisonNote" role="status" aria-live="polite"></p><p class="ledger-help">以上为已纳入成本下的模型经营结果，不代表完整净利润；未涵盖税费、坏账、停工及其他未录入费用。零资金需求时资金回报率显示“不适用”，亏损或回报不足时如实提示。</p></div>
+      <div class="panel"><h3 style="margin:0 0 4px;font-size:15px">初始营运资金余额趋势（24个月）</h3><p style="margin:0;color:var(--muted);font-size:12px">按各情景自身模拟所得的初始资金需求注入后，展示月末现金余额；单位：万元。</p><div class="chart-wrap"><svg id="cashChart" role="img" aria-label="收费前后24个月月末现金余额趋势图"></svg></div><div class="chart-caption"><span class="legend"><i class="dot"></i>收费前</span><span class="legend"><i class="dot gray"></i>收费后</span><span>垂直刻度按金额自动缩放</span></div></div>
+    </section>
+
+    <section aria-labelledby="yearsTitle"><div class="section-title"><div><h2 id="yearsTitle">第一年与第二年 · 现金和利润区分</h2><p id="yearTimingNote"></p></div></div><div class="compare">
+      <div class="panel"><h3 style="margin:0 0 12px;font-size:15px">收费前年度账本</h3><div class="table-wrap"><table class="data-table year-table"><thead><tr><th>指标</th><th>第一年 · 启动期</th><th>第二年 · 连续经营</th></tr></thead><tbody id="beforeYearTable"></tbody></table></div></div>
+      <div class="panel"><h3 style="margin:0 0 12px;font-size:15px">收费后年度账本</h3><div class="table-wrap"><table class="data-table year-table"><thead><tr><th>指标</th><th>第一年 · 启动期</th><th>第二年 · 连续经营</th></tr></thead><tbody id="afterYearTable"></tbody></table></div></div>
+    </div></section>
+
+    <section aria-labelledby="monthlyTitle"><div class="section-title"><div><h2 id="monthlyTitle">24个月逐月现金流明细</h2><p>以下为收取管理费情景。收入和毛利按业务发生月份确认；回款、工资支付分别按对应账期滚动。固定运营费用默认按人数×60元/人/月意外险估算，实际采用项目测算条件中的金额，当月支付并在毛利以下扣除，不重复扣费。经营现金流＝客户回款－工资支出－招工/渠道成本－固定运营费用－平台费；融资成本仅在经营结果中单独估算，未计入本表现金流。</p></div></div><div class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>月份</th><th>营业收入</th><th>工资成本</th><th>招工/渠道成本</th><th>毛利润</th><th>固定运营费用（元/月）</th><th>平台费</th><th>客户回款</th><th>工资支出</th><th>经营现金流</th><th>累计经营现金流</th><th>月末应收账款</th><th>月末应付工资</th><th>注入启动资金后现金余额</th></tr></thead><tbody id="monthlyRows"></tbody></table></div></div></section>
+
+    <section aria-labelledby="formulaTitle"><div class="section-title"><div><h2 id="formulaTitle">口径与公式说明</h2><p>资金回报率使用项目毛利/经营利润与初始营运资金，不代表公司净资产收益率。</p></div></div><div class="panel"><div class="formula-grid">
+      <div class="formula"><strong>营业收入与直接人工成本</strong><span>月总工时 = 人数 × 每月工作天数 × 每日工时。月收入 = 月总工时 × 客户工价；工资成本 = 月总工时 × 工人工价。</span></div>
+      <div class="formula"><strong>毛利润与毛利率</strong><span>月招工/渠道成本 = 总履约工时 × 招工/渠道成本（元/人/小时）。月毛利润 = 营业收入 − 工资成本 − 招工/渠道成本。该成本是为获得和履行项目实际支付的直接成本，不计为供应商利润；平台管理费、固定运营费和融资利息另列。</span></div>
+      <div class="formula"><strong>初始营运资金需求</strong><span>逐月累计经营现金流的最低点绝对值。收费前后分别按各自现金流重新模拟；工资按所选支付周期结算，收费后平台管理费当月支付。</span></div>
+      <div class="formula"><strong>工资支付周期如何影响现金流</strong><span>30天档表示工资在当月支付；60天档表示当月工资在次月支付。工资成本仍在实际用工月份计入毛利，只改变现金流发生时间，并在月末单独展示应付工资。</span></div>
+      <div class="formula"><strong>年经营资金回报率</strong><span>融资前 =（全年毛利润 − 全年固定运营费用 − 本情景全年平台费）÷ 本情景初始营运资金需求；扣融资后再从分子减全年融资成本估算。不收管理费情景的平台费为零。原始毛利资金回报率仅在展开说明中保留。分母为零显示“不适用”。</span></div>
+      <div class="formula"><strong>融资年利率对比</strong><span>回报利差 = 年化资金回报率 − 融资年利率。正值表示模型中的项目资金回报率高于融资成本，负值表示低于融资成本；分别展示收费前、收费后利差。这里比较的是资金回报率，不是把月利润乘12直接称作回报率。</span></div>
+      <div class="formula"><strong>回款笔数与毛利确认月份</strong><span id="collectionTimingExplanation"></span></div>
+      <div class="formula"><strong>融资成本估算</strong><span>展示值 = 本情景初始营运资金需求 × 融资年利率。为便于年度对比，按初始资金需求全年占用的简化口径估算，不替代逐日贷款计息。</span></div>
+    </div></div></section>
+    <footer>情景测算不构成报价、利润、资金回报或收益承诺。不考虑停工、坏账、退款、人员流失、税费、社保及其他未输入成本；招工/渠道成本按输入计入。毛利不是净利润；平台管理费的收费与结算须遵循项目合同及已批准的商业模式规则。固定模型规则：每年12个月，30天折算一个月，向上取整延迟档位，连续模拟24个月；工资周期30天为当月支付；渠道成本、固定费用、平台费均当月支付。融资成本按初始营运资金全年占用估算。模型不作精确到日的现金流预测。</footer>
+  </main>
+  <script>
+    const ACCIDENT_INSURANCE_PER_WORKER_MONTH = 60;
+    const DEFAULTS = {
+      workers: 1000,
+      clientHourlyRate: 24,
+      workerHourlyRate: 22,
+      hoursPerDay: 12,
+      workDaysPerMonth: 26,
+      clientPaymentDays: 60,
+      wagePaymentDays: 30,
+      hiringChannelCostPerWorkerHour: 1.5,
+      accidentInsurancePerWorkerMonth: ACCIDENT_INSURANCE_PER_WORKER_MONTH,
+      monthlyFixedCost: 1000 * ACCIDENT_INSURANCE_PER_WORKER_MONTH,
+      annualFinancingRate: 0,
+      platformFeePerPersonDay: 2,
+    };
+    const WORKER_TIERS = Array.from({ length: 10 }, (_, index) => (index + 1) * 100);
+
+    function calculateSimulator(rawInput = {}) {
+      const input = { ...DEFAULTS, ...rawInput };
+      if (rawInput.monthlyFixedCost === undefined) input.monthlyFixedCost = input.workers * input.accidentInsurancePerWorkerMonth;
+      if (!WORKER_TIERS.includes(input.workers)) throw new RangeError("稳定工人规模必须选择100至1000人的100人档位");
+      const spread = Math.round((input.clientHourlyRate - input.workerHourlyRate) * 100) / 100;
+      if (input.hiringChannelCostPerWorkerHour > spread + 0.000001 || (input.hiringChannelCostPerWorkerHour > 0 && Math.abs(input.hiringChannelCostPerWorkerHour * 10 - Math.round(input.hiringChannelCostPerWorkerHour * 10)) > 0.000001)) throw new RangeError("招工/渠道成本须按0.1元递增，且不能高于客户工价与工人工价的差额");
+      const monthlyHours = input.workDaysPerMonth * input.hoursPerDay;
+      const monthlyRevenue = input.workers * monthlyHours * input.clientHourlyRate;
+      const monthlyWages = input.workers * monthlyHours * input.workerHourlyRate;
+      const monthlyHiringChannelCost = input.workers * monthlyHours * input.hiringChannelCostPerWorkerHour;
+      const monthlyGrossProfit = monthlyRevenue - monthlyWages - monthlyHiringChannelCost;
+      const delayMonths = Math.ceil(input.clientPaymentDays / 30);
+      const wageDelayMonths = Math.ceil(input.wagePaymentDays / 30) - 1;
+      if (![30, 60, 90, 120, 150, 180].includes(input.wagePaymentDays)) throw new RangeError("工资支付周期必须选择30天的倍数档位");
+
+      function simulate(includePlatformFee) {
+        const monthlyPlatformFee = includePlatformFee ? input.workers * input.workDaysPerMonth * input.platformFeePerPersonDay : 0;
+        const rows = [];
+        let cumulativeCashFlow = 0;
+        let receivables = 0;
+        let wagesPayable = 0;
+        for (let month = 1; month <= 24; month += 1) {
+          const customerCollection = month - delayMonths >= 1 ? monthlyRevenue : 0;
+          wagesPayable += monthlyWages;
+          const wagePayment = month - wageDelayMonths >= 1 ? monthlyWages : 0;
+          wagesPayable -= wagePayment;
+          const operatingCashFlow = customerCollection - wagePayment - monthlyHiringChannelCost - input.monthlyFixedCost - monthlyPlatformFee;
+          cumulativeCashFlow += operatingCashFlow;
+          receivables += monthlyRevenue - customerCollection;
+          rows.push({ month, revenue: monthlyRevenue, directLaborCost: monthlyWages, hiringChannelCost: monthlyHiringChannelCost, fixedOperatingCost: input.monthlyFixedCost, grossProfit: monthlyGrossProfit, platformFee: monthlyPlatformFee, customerCollection, wagePayment, operatingCashFlow, cumulativeCashFlow, receivables, wagesPayable, initialCapitalCashBalance: 0 });
+        }
+        const initialWorkingCapital = Math.max(0, -Math.min(0, ...rows.map((row) => row.cumulativeCashFlow)));
+        rows.forEach((row) => { row.initialCapitalCashBalance = initialWorkingCapital + row.cumulativeCashFlow; });
+        const annualFinancingCost = initialWorkingCapital * input.annualFinancingRate;
+        const annualGrossProfit = monthlyGrossProfit * 12;
+        const annualProfitAfterPlatformFee = (monthlyGrossProfit - monthlyPlatformFee) * 12;
+      const annualOperatingProfit = annualProfitAfterPlatformFee - input.monthlyFixedCost * 12;
+      const annualOperatingProfitAfterFinancing = annualOperatingProfit - annualFinancingCost;
+      const annualOperatingCapitalReturn = initialWorkingCapital ? annualOperatingProfit / initialWorkingCapital : null;
+      const annualNetOperatingCapitalReturn = initialWorkingCapital ? annualOperatingProfitAfterFinancing / initialWorkingCapital : null;
+      let cumulativeWageCashFlow = 0;
+      let minimumWageCashFlow = 0;
+      for (const row of rows) {
+        cumulativeWageCashFlow += row.customerCollection - row.wagePayment;
+        minimumWageCashFlow = Math.min(minimumWageCashFlow, cumulativeWageCashFlow);
+      }
+      const annualGrossProfitCapitalReturn = initialWorkingCapital ? annualGrossProfit / initialWorkingCapital : 0;
+      const annualAfterFeeCapitalReturn = initialWorkingCapital ? annualProfitAfterPlatformFee / initialWorkingCapital : 0;
+        const years = [1, 2].map((year) => {
+          const yearRows = rows.slice((year - 1) * 12, year * 12);
+          const sum = (key) => yearRows.reduce((total, row) => total + row[key], 0);
+          return { revenue: sum("revenue"), grossProfit: sum("grossProfit"), customerCollections: sum("customerCollection"), wagePayments: sum("wagePayment"), operatingCashFlow: sum("operatingCashFlow"), receivables: yearRows.at(-1).receivables, wagesPayable: yearRows.at(-1).wagesPayable, endingCashBalance: yearRows.at(-1).initialCapitalCashBalance };
+        });
+        return { monthlyHours, monthlyRevenue, monthlyWages, monthlyHiringChannelCost, monthlyGrossProfit, monthlyPlatformFee, grossMargin: monthlyRevenue ? monthlyGrossProfit / monthlyRevenue : 0, annualGrossProfit, annualProfitAfterPlatformFee, annualOperatingProfit, initialWorkingCapital, annualFinancingCost, annualOperatingProfitAfterFinancing, annualOperatingCapitalReturn, annualNetOperatingCapitalReturn, annualOperatingReturnSpread: annualOperatingCapitalReturn === null ? null : annualOperatingCapitalReturn - input.annualFinancingRate, wageWorkingCapital: -minimumWageCashFlow, annualGrossProfitCapitalReturn, annualAfterFeeCapitalReturn, annualGrossReturnSpread: annualGrossProfitCapitalReturn - input.annualFinancingRate, annualAfterFeeReturnSpread: annualAfterFeeCapitalReturn - input.annualFinancingRate, annualGrossReturnAfterFinancing: annualGrossProfitCapitalReturn - input.annualFinancingRate, annualAfterFeeReturnAfterFinancing: annualAfterFeeCapitalReturn - input.annualFinancingRate, rows, years };
+      }
+
+      const beforeFee = simulate(false);
+      const afterFee = simulate(true);
+      for (const scenario of [beforeFee, afterFee]) {
+        scenario.annualOperatingCost = (scenario.monthlyWages + scenario.monthlyHiringChannelCost + input.monthlyFixedCost + scenario.monthlyPlatformFee) * 12 + scenario.annualFinancingCost;
+        scenario.annualCostProfitRate = scenario.annualOperatingCost > 0 ? scenario.annualOperatingProfitAfterFinancing / scenario.annualOperatingCost : null;
+      }
+      return { input, beforeFee, afterFee, annualFee: afterFee.monthlyPlatformFee * 12, feePerWorkerDay: input.platformFeePerPersonDay, feeShareOfGrossProfit: monthlyGrossProfit ? afterFee.monthlyPlatformFee / monthlyGrossProfit : 0 };
+    }
+
+    const currency = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
+    const integer = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
+    const percent = (value) => `${(value * 100).toFixed(2)}%`;
+    const money = (value) => `¥${currency.format(value)}`;
+    const inputIds = Object.keys(DEFAULTS);
+    const fields = Object.fromEntries(inputIds.map((id) => [id, document.getElementById(id)]));
+    for (const workers of WORKER_TIERS) {
+      const option = new Option(`${integer.format(workers)} 人`, String(workers));
+      if (workers === DEFAULTS.workers) option.selected = true;
+      fields.workers.add(option);
+    }
+    const feeSelect = fields.platformFeePerPersonDay;
+    for (let step = 1; step <= 10; step += 1) {
+      const amount = step * 0.5;
+      const value = String(amount);
+      const option = new Option(`¥${amount.toFixed(1)} / 有效履约人天`, value);
+      if (amount === DEFAULTS.platformFeePerPersonDay) option.selected = true;
+      feeSelect.add(option);
+    }
+    const wageCycleSelect = fields.wagePaymentDays;
+    for (const days of [30, 60, 90, 120, 150, 180]) {
+      const option = new Option(`${days}天${days === 30 ? "（当月支付）" : `（延后${days / 30 - 1}个月）`}`, String(days));
+      if (days === DEFAULTS.wagePaymentDays) option.selected = true;
+      wageCycleSelect.add(option);
+    }
+    for (const [id, value] of Object.entries(DEFAULTS)) fields[id].value = String(value);
+
+    function updateHiringChannelCostOptions() {
+      const spread = Math.round((Number(fields.clientHourlyRate.value) - Number(fields.workerHourlyRate.value)) * 100) / 100;
+      const select = fields.hiringChannelCostPerWorkerHour;
+      const previousValue = Number(select.value || DEFAULTS.hiringChannelCostPerWorkerHour);
+      const maximumStep = Math.floor((spread + 0.000001) * 10);
+      select.replaceChildren();
+      select.add(new Option("¥0.0 / 不计招工渠道成本", "0"));
+      if (maximumStep < 1) {
+        select.value = "0";
+        select.disabled = false;
+        document.getElementById("hiringChannelCostHint").textContent = `当前工价差为${money(Math.max(0, spread))}，可选择不计渠道成本；工价差达到0.1元后出现收费档位`;
+        return;
+      }
+      select.disabled = false;
+      for (let step = 1; step <= maximumStep; step += 1) {
+        const value = step / 10;
+        select.add(new Option(`¥${value.toFixed(1)} / 人 / 小时`, value.toFixed(1)));
+      }
+      const selected = Math.min(previousValue, maximumStep / 10);
+      select.value = previousValue === 0 ? "0" : selected.toFixed(1);
+      document.getElementById("hiringChannelCostHint").textContent = `可选档位：¥0.1–¥${(maximumStep / 10).toFixed(1)}（另可选0元），上限按工价差${money(spread)}向下取0.1元档`;
+    }
+    updateHiringChannelCostOptions();
+
+    function showError(message = "") {
+      const error = document.getElementById("errorMessage");
+      error.textContent = message;
+      error.classList.toggle("visible", Boolean(message));
+    }
+
+    function readInputs() {
+      const values = {};
+      for (const id of inputIds) {
+        const field = fields[id];
+        const value = field.value.trim() === "" ? NaN : Number(field.value);
+        if (!Number.isFinite(value) || value < 0 || (field.min && value < Number(field.min)) || (field.max && value > Number(field.max))) {
+          field.setAttribute("aria-invalid", "true");
+          throw new Error(`请检查“${field.labels[0]?.textContent ?? id}”，请输入范围内的有效非负数字。`);
+        }
+        field.removeAttribute("aria-invalid");
+        values[id] = value;
+      }
+      values.annualFinancingRate /= 100;
+      return values;
+    }
+
+    function setText(id, text) { document.getElementById(id).textContent = text; }
+    function setMoney(id, value) { setText(id, money(value)); }
+    function signedClass(value) { return value < 0 ? "negative-text" : "positive"; }
+
+    function renderLedger(id, rows, captions = ["不收管理费", "收取管理费"]) {
+      document.getElementById(id).innerHTML = rows.map(([label, left, right, key = false, note = "", leftValue = null, rightValue = null]) => `<div class="ledger-row${key ? " key" : ""}"><span class="ledger-label">${label}</span><div class="ledger-value ${leftValue === null ? "" : signedClass(leftValue)}" data-caption="${captions[0]}">${left}</div><div class="ledger-value ${rightValue === null ? "" : signedClass(rightValue)}" data-caption="${captions[1]}">${right}${note ? `<small>${note}</small>` : ""}</div></div>`).join("");
+    }
+
+    function renderOverview(result) {
+      const { input, beforeFee: before } = result;
+      setText("businessContext", `${integer.format(input.workers)}人 · 每人每月${integer.format(input.workDaysPerMonth * input.hoursPerDay)}小时 · 客户工价${money(input.clientHourlyRate)}/小时 · 工人工价${money(input.workerHourlyRate)}/小时 · 渠道成本${money(input.hiringChannelCostPerWorkerHour)}/人/小时`);
+      renderLedger("businessRows", [
+        ["营业收入", money(before.monthlyRevenue), money(before.monthlyRevenue * 12)],
+        ["工人工资成本（累计发生）", money(before.monthlyWages), money(before.monthlyWages * 12)],
+        ["招工／渠道成本", money(before.monthlyHiringChannelCost), money(before.monthlyHiringChannelCost * 12)],
+        ["原始毛利润", money(before.monthlyGrossProfit), money(before.annualGrossProfit), true, "", before.monthlyGrossProfit, before.annualGrossProfit],
+        ["原始毛利率", before.monthlyRevenue ? percent(before.grossMargin) : "不适用", before.monthlyRevenue ? percent(before.grossMargin) : "不适用"],
+        ["固定运营费用（默认意外险）", money(input.monthlyFixedCost), money(input.monthlyFixedCost * 12)],
+      ], ["月度", "年度 · 12个月"]);
+    }
+
+    function renderCompare(result) {
+      const { input, beforeFee: before, afterFee: after } = result;
+      const margin = (scenario) => scenario.monthlyRevenue ? percent(scenario.annualOperatingProfitAfterFinancing / (scenario.monthlyRevenue * 12)) : "不适用";
+      const returnText = (value) => value === null ? "不适用（无资金缺口）" : percent(value);
+      const spreadText = (value) => value === null ? "不适用（无资金缺口）" : `${value >= 0 ? "高于" : "低于"} ${Math.abs(value * 100).toFixed(2)} 个百分点`;
+      const moneyRows = (scale) => [
+        ["原始毛利润", money(before.monthlyGrossProfit * scale), money(after.monthlyGrossProfit * scale)],
+        ["减：固定运营费用", money(-input.monthlyFixedCost * scale), money(-input.monthlyFixedCost * scale)],
+        ["减：平台管理费", money(0), money(-after.monthlyPlatformFee * scale)],
+        ["融资前经营结余", money(before.annualOperatingProfit * scale / 12), money(after.annualOperatingProfit * scale / 12), false, "", before.annualOperatingProfit, after.annualOperatingProfit],
+        [scale === 1 ? "减：月均融资成本估算" : "减：全年融资成本估算", money(-before.annualFinancingCost * scale / 12), money(-after.annualFinancingCost * scale / 12)],
+        [scale === 1 ? "扣融资后月经营结果" : "扣融资后年经营结果", money(before.annualOperatingProfitAfterFinancing * scale / 12), money(after.annualOperatingProfitAfterFinancing * scale / 12), true, "", before.annualOperatingProfitAfterFinancing, after.annualOperatingProfitAfterFinancing],
+        ["经营结果率（经营结果 ÷ 收入）", margin(before), margin(after)],
+      ];
+      renderLedger("monthlyComparisonRows", moneyRows(1));
+      renderLedger("annualComparisonRows", [
+        ...moneyRows(12),
+        ["全年经营成本（累计发生额，含融资）", money(before.annualOperatingCost), money(after.annualOperatingCost)],
+        ["年度成本利润率（年经营结余 ÷ 全年经营成本）", before.annualCostProfitRate === null ? "不适用（成本为零）" : percent(before.annualCostProfitRate), after.annualCostProfitRate === null ? "不适用（成本为零）" : percent(after.annualCostProfitRate), true, "每发生100元成本，留下多少经营结余；不是资金回报率", before.annualCostProfitRate, after.annualCostProfitRate],
+      ]);
+      const annualReduction = before.annualOperatingProfitAfterFinancing - after.annualOperatingProfitAfterFinancing;
+      setText("monthlyComparisonNote", `按${integer.format(input.workers * input.workDaysPerMonth)}个有效履约人天/月 × ${money(input.platformFeePerPersonDay)}/人天计费，月平台费${money(after.monthlyPlatformFee)}。计入融资成本变化后，每月经营结果${annualReduction >= 0 ? "减少" : "增加"}${money(Math.abs(annualReduction) / 12)}；收费后${after.annualOperatingProfitAfterFinancing >= 0 ? "结余" : "亏损"}${money(Math.abs(after.annualOperatingProfitAfterFinancing) / 12)}/月。`);
+      renderLedger("capitalComparisonRows", [
+        ["客户回款账期", `${input.clientPaymentDays}天（折合${Math.ceil(input.clientPaymentDays / 30)}个月）`, `${input.clientPaymentDays}天（折合${Math.ceil(input.clientPaymentDays / 30)}个月）`],
+        ["工资支付周期", `${input.wagePaymentDays}天`, `${input.wagePaymentDays}天`],
+        ["工资周转资金（仅工资与回款）", money(before.wageWorkingCapital), money(after.wageWorkingCapital)],
+        ["项目总周转资金需求（模拟最大缺口）", money(before.initialWorkingCapital), money(after.initialWorkingCapital), true, `较不收费${after.initialWorkingCapital >= before.initialWorkingCapital ? "增加" : "减少"}${money(Math.abs(after.initialWorkingCapital - before.initialWorkingCapital))}`],
+        ["融资前年经营资金回报率", returnText(before.annualOperatingCapitalReturn), returnText(after.annualOperatingCapitalReturn)],
+        ["融资年利率", percent(input.annualFinancingRate), percent(input.annualFinancingRate)],
+        ["经营资金回报率与融资利率之差", spreadText(before.annualOperatingReturnSpread), spreadText(after.annualOperatingReturnSpread), false, "", before.annualOperatingReturnSpread, after.annualOperatingReturnSpread],
+        ["扣融资后年经营资金回报率（年经营结余 ÷ 项目总周转本金）", returnText(before.annualNetOperatingCapitalReturn), returnText(after.annualNetOperatingCapitalReturn), true, "每准备100元周转本金，一年留下多少经营结余；不是年度成本利润率", before.annualNetOperatingCapitalReturn, after.annualNetOperatingCapitalReturn],
+      ]);
+      setText("capitalFormula", `当前客户账期${integer.format(input.clientPaymentDays)}天，工资支付周期${integer.format(input.wagePaymentDays)}天；工资周转资金＝仅保留客户回款、工资支出的${before.rows.length}个月累计现金流最大缺口，本次为${money(before.wageWorkingCapital)}。不含渠道、固定费用、平台费，不与总资金需求相加。总营运资金按全部已建模支出另行模拟。收费前年经营资金回报率：${money(before.annualOperatingProfit)} ÷ ${money(before.initialWorkingCapital)}；收费后：${money(after.annualOperatingProfit)} ÷ ${money(after.initialWorkingCapital)}。扣融资后的回报率使用各自扣融资后的年经营结果作分子，资金需求为零时不计算。`);
+      document.getElementById("capitalFormula").textContent += ` 两层指标使用相同的扣融资后年经营结余，但分母不同：成本利润率按全年工资、渠道、固定费用、平台费及融资成本的累计发生额计算，收费前为${money(before.annualOperatingProfitAfterFinancing)} ÷ ${money(before.annualOperatingCost)}，收费后为${money(after.annualOperatingProfitAfterFinancing)} ÷ ${money(after.annualOperatingCost)}；资金回报率按需要准备的周转本金计算，收费前为${money(before.annualOperatingProfitAfterFinancing)} ÷ ${money(before.initialWorkingCapital)}，收费后为${money(after.annualOperatingProfitAfterFinancing)} ÷ ${money(after.initialWorkingCapital)}。工资当月支付且回款稳定时，工资垫资本金可用账期月份×月工资简估；工资延付或其他成本存在时，以模拟结果为准。周转本金不包含融资利息的再融资需求，融资费用单独扣除；两项指标均不代表完整税后净利润率。`;
+      renderLedger("grossReturnRows", [["年化毛利润资金回报率（按初始营运资金需求计算）", before.initialWorkingCapital ? percent(before.annualGrossProfitCapitalReturn) : "不适用", after.initialWorkingCapital ? percent(after.annualGrossProfitCapitalReturn) : "不适用"]]);
+      const returnStatus = after.annualOperatingReturnSpread === null ? "无资金缺口，不计算资金回报率" : after.annualOperatingReturnSpread > 0 ? "融资前经营资金回报率高于融资年利率" : after.annualOperatingReturnSpread < 0 ? "融资前经营资金回报率低于融资年利率" : "融资前经营资金回报率等于融资年利率";
+      setText("comparisonNote", `全年平台费${money(result.annualFee)}；扣固定运营费用及融资成本后，收费前${before.annualOperatingProfitAfterFinancing >= 0 ? "结余" : "亏损"}${money(Math.abs(before.annualOperatingProfitAfterFinancing))}/年，收费后${after.annualOperatingProfitAfterFinancing >= 0 ? "结余" : "亏损"}${money(Math.abs(after.annualOperatingProfitAfterFinancing))}/年。${returnStatus}。这是测算结果，不承诺所有项目收费后均有利润。`);
+      document.getElementById("comparisonNote").classList.toggle("negative-text", after.annualOperatingProfitAfterFinancing < 0);
+    }
+
+    function renderYearTable(id, scenario) {
+      const rows = [
+        ["业务确认月份", ...scenario.years.map((year, index) => `${scenario.rows.slice(index * 12, (index + 1) * 12).length}个月`)],
+        ["确认营业收入", ...scenario.years.map((year) => money(year.revenue))],
+        ["确认毛利润", ...scenario.years.map((year) => money(year.grossProfit))],
+        ["实际收到客户回款", ...scenario.years.map((year) => money(year.customerCollections))],
+        ["实际支付工资", ...scenario.years.map((year) => money(year.wagePayments))],
+        ["年末应付工资", ...scenario.years.map((year) => money(year.wagesPayable))],
+        ["经营现金流", ...scenario.years.map((year) => money(year.operatingCashFlow))],
+        ["年末应收账款", ...scenario.years.map((year) => money(year.receivables))],
+        ["年末现金余额（已注入初始资金）", ...scenario.years.map((year) => money(year.endingCashBalance))],
+      ];
+      document.getElementById(id).innerHTML = rows.map(([label, first, second]) => `<tr><td>${label}</td><td>${first}</td><td>${second}</td></tr>`).join("");
+    }
+
+    function renderMonthly(result) {
+      const { beforeFee, afterFee } = result;
+      document.getElementById("monthlyRows").innerHTML = beforeFee.rows.map((row, index) => {
+        const afterRow = afterFee.rows[index];
+        const values = [
+          `第${row.month}月`, money(row.revenue), money(row.directLaborCost), money(row.hiringChannelCost), money(row.grossProfit), money(afterRow.fixedOperatingCost), money(afterRow.platformFee),
+          money(row.customerCollection), money(row.wagePayment), money(afterRow.operatingCashFlow), money(afterRow.cumulativeCashFlow),
+          money(afterRow.receivables), money(afterRow.wagesPayable), money(afterRow.initialCapitalCashBalance),
+        ];
+        return `<tr>${values.map((value, cellIndex) => `<td${cellIndex === 0 ? "" : ` class="${cellIndex === 9 ? signedClass(afterRow.operatingCashFlow) : ""}"`}>${value}</td>`).join("")}</tr>`;
+      }).join("");
+    }
+
+    function renderChart(result) {
+      const svg = document.getElementById("cashChart");
+      const width = Math.max(640, svg.clientWidth || 900);
+      const height = 240;
+      const pad = { top: 14, right: 20, bottom: 28, left: 66 };
+      const series = [result.beforeFee.rows.map((row) => row.initialCapitalCashBalance / 10000), result.afterFee.rows.map((row) => row.initialCapitalCashBalance / 10000)];
+      const maximum = Math.max(1, ...series.flat());
+      const minimum = Math.min(0, ...series.flat());
+      const range = maximum - minimum || 1;
+      const x = (index) => pad.left + index * (width - pad.left - pad.right) / Math.max(1, result.beforeFee.rows.length - 1);
+      const y = (value) => pad.top + (maximum - value) * (height - pad.top - pad.bottom) / range;
+      const grid = Array.from({ length: 5 }, (_, index) => {
+        const value = minimum + range * index / 4;
+        const yy = y(value);
+        return `<line x1="${pad.left}" y1="${yy}" x2="${width - pad.right}" y2="${yy}" stroke="#e7ede8"/><text x="${pad.left - 9}" y="${yy + 4}" text-anchor="end" fill="#68776e" font-size="10">${value.toFixed(0)}万</text>`;
+      }).join("");
+      const path = (values) => values.map((value, index) => `${index ? "L" : "M"}${x(index)},${y(value)}`).join(" ");
+      const labels = Array.from({ length: 12 }, (_, index) => {
+        const monthIndex = index * 2;
+        return `<text x="${x(monthIndex)}" y="${height - 5}" text-anchor="middle" fill="#68776e" font-size="10">${monthIndex + 1}月</text>`;
+      }).join("");
+      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      svg.innerHTML = `${grid}${labels}<path d="${path(series[0])}" fill="none" stroke="#146b4a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="${path(series[1])}" fill="none" stroke="#9aa9a0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`;
+    }
+
+    function update() {
+      try {
+        const result = calculateSimulator(readInputs());
+        showError();
+        renderOverview(result);
+        renderCompare(result);
+        renderYearTable("beforeYearTable", result.beforeFee);
+        renderYearTable("afterYearTable", result.afterFee);
+        renderMonthly(result);
+        renderChart(result);
+        const collectionCounts = result.beforeFee.years.map((year, index) => result.beforeFee.rows.slice(index * 12, (index + 1) * 12).filter((row) => row.customerCollection > 0).length);
+        setText("collectionTimingExplanation", `当前客户账期${integer.format(result.input.clientPaymentDays)}天，按月模型折算延后${Math.ceil(result.input.clientPaymentDays / 30)}个月回款。第一年实际非零回款${collectionCounts[0]}笔，第二年${collectionCounts[1]}笔；两年均按实际业务发生确认收入和毛利，回款不决定毛利是否产生。第一年末应收账款${money(result.beforeFee.years[0].receivables)}，第二年末${money(result.beforeFee.years[1].receivables)}。`);
+        setText("yearTimingNote", `第一年为启动期，第二年承接前一年末应收账款；实际非零回款分别为${collectionCounts[0]}笔、${collectionCounts[1]}笔。第二年是否已稳定取决于所选账期及项目是否亏损，不默认保证进入稳定期。`);
+      } catch (error) {
+        for (const id of ["businessRows", "monthlyComparisonRows", "annualComparisonRows", "capitalComparisonRows", "grossReturnRows", "beforeYearTable", "afterYearTable", "monthlyRows", "cashChart"]) document.getElementById(id).innerHTML = "";
+        for (const id of ["businessContext", "monthlyComparisonNote", "capitalFormula", "comparisonNote", "collectionTimingExplanation", "yearTimingNote"]) setText(id, "输入无效，暂无测算结果");
+        showError(error.message);
+      }
+    }
+
+    let fixedCostFollowsWorkers = true;
+    function updateFixedCostDefault(field) {
+      if (field.id === "monthlyFixedCost") fixedCostFollowsWorkers = false;
+      if (["workers", "accidentInsurancePerWorkerMonth"].includes(field.id) && fixedCostFollowsWorkers) fields.monthlyFixedCost.value = String(Number(fields.workers.value) * Number(fields.accidentInsurancePerWorkerMonth.value));
+    }
+    for (const field of Object.values(fields)) {
+      field.addEventListener("input", () => {
+        updateFixedCostDefault(field);
+        update();
+      });
+      field.addEventListener("change", () => {
+        updateFixedCostDefault(field);
+        if (field.id === "clientHourlyRate" || field.id === "workerHourlyRate") updateHiringChannelCostOptions();
+        update();
+      });
+    }
+    document.getElementById("resetButton").addEventListener("click", () => {
+      fixedCostFollowsWorkers = true;
+      for (const [id, value] of Object.entries(DEFAULTS)) fields[id].value = String(value);
+      updateHiringChannelCostOptions();
+      update();
+    });
+    document.getElementById("printButton").addEventListener("click", () => window.print());
+    window.addEventListener("resize", () => {
+      try { renderChart(calculateSimulator(readInputs())); } catch { /* Keep the current validation message visible. */ }
+    });
+    update();
+  </script>
+</body>
+</html>
