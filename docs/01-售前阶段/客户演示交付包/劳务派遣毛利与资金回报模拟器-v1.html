@@ -91,7 +91,7 @@
       accidentInsurancePerWorkerMonth: ACCIDENT_INSURANCE_PER_WORKER_MONTH,
       monthlyFixedCost: 1000 * ACCIDENT_INSURANCE_PER_WORKER_MONTH,
       annualFinancingRate: 0,
-      platformFeePerPersonDay: 2,
+      platformFeePerPersonDay: 1,
     };
     const WORKER_TIERS = Array.from({ length: 10 }, (_, index) => (index + 1) * 100);
 
@@ -172,7 +172,7 @@
       fields.workers.add(option);
     }
     const feeSelect = fields.platformFeePerPersonDay;
-    for (let step = 1; step <= 10; step += 1) {
+    for (let step = 1; step <= 6; step += 1) {
       const amount = step * 0.5;
       const value = String(amount);
       const option = new Option(`¥${amount.toFixed(1)} / 有效履约人天`, value);

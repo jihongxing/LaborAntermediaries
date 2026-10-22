@@ -12,7 +12,7 @@ export const DEFAULTS = Object.freeze({
   accidentInsurancePerWorkerMonth: ACCIDENT_INSURANCE_PER_WORKER_MONTH,
   monthlyFixedCost: 1000 * ACCIDENT_INSURANCE_PER_WORKER_MONTH,
   annualFinancingRate: 0,
-  platformFeePerPersonDay: 2,
+  platformFeePerPersonDay: 1,
 });
 
 const MONTHS_PER_YEAR = 12;

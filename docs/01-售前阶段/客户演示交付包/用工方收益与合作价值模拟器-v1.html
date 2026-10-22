@@ -33,8 +33,8 @@
   <footer>金额为人民币，最多显示两位小数。分享收益归属于签约用工方组织，实际支付以合同约定及结算条件为准，不代表个人奖励、自动到账或利润保证。本页可离线使用。</footer>
 </main>
 <script>
-  const BUYER_RULES = Object.freeze({ baseFeeCents: 50, buyerSharePercent: 60, feeStepCents: 50, maximumFeeCents: 500 });
-  const BUYER_DEFAULTS = Object.freeze({ workers: 1000, effectiveDays: 26, fee: 2, months: 12 });
+  const BUYER_RULES = Object.freeze({ baseFeeCents: 50, buyerSharePercent: 60, feeStepCents: 50, maximumFeeCents: 300 });
+  const BUYER_DEFAULTS = Object.freeze({ workers: 1000, effectiveDays: 26, fee: 1, months: 12 });
   const WORKER_TIERS = Array.from({ length: 10 }, (_, index) => (index + 1) * 100);
   const FEE_TIERS = Array.from({ length: BUYER_RULES.maximumFeeCents / BUYER_RULES.feeStepCents }, (_, index) => (index + 1) * BUYER_RULES.feeStepCents / 100);
   function calculateBuyer(rawInput) {
@@ -46,7 +46,7 @@
     }
     if (!WORKER_TIERS.includes(input.workers)) throw new RangeError("人数请选择100至1,000人的100人档位。");
     if (input.effectiveDays < 0 || input.effectiveDays > 31 || !Number.isInteger(input.effectiveDays * 2)) throw new RangeError("有效履约天数须为0至31天，每0.5天一档。");
-    if (!FEE_TIERS.includes(input.fee)) throw new RangeError("管理费须为0.5至5元，每0.5元一档。");
+    if (!FEE_TIERS.includes(input.fee)) throw new RangeError("管理费须为0.5至3元，每0.5元一档。");
     if (!Number.isInteger(input.months) || input.months < 1 || input.months > 12) throw new RangeError("年度履约月份请选择1至12个月。");
     const monthlyPersonDays = input.workers * input.effectiveDays;
     const amountAtFee = (fee) => {
