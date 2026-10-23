@@ -58,7 +58,7 @@
     </root>
 
     <!-- 业务日志级别（可根据需要调整） -->
-    <logger name="com.company.labor" level="DEBUG"/>
+    <logger name="com.company.labor" level="INFO"/>
 
     <!-- 第三方库日志级别 -->
     <logger name="org.springframework" level="INFO"/>

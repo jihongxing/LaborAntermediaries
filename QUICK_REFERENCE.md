@@ -194,3 +194,6 @@ String masked = idCard.substring(0, 3) + "***" + idCard.substring(14);
 ---
 
 最后更新：2026年10月18日
+# 后端底座接入更新（2026-10-23）
+
+当前后端能力与运行步骤见 `backend/README.md`，能力建设依据见 `docs/02-开发阶段/技术方案/通用后端底座建设方案-v1.md`。本页旧示例中的 `IdGenerator` 已移除，改用 `SequenceIds`；加密使用外部密钥 `CryptoService`，JSON 使用 `JsonCodec`，身份及权限使用 `ExecutionContext`。后续开发不得重新引入固定 AES 密钥、请求体日志或业务代码中的租户切换。

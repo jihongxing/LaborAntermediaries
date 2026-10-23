@@ -59,42 +59,6 @@ class CryptoUtilTest {
     }
 
     @Test
-    @DisplayName("AES加密解密")
-    void testAesEncryptDecrypt() {
-        String plainText = "330123199001011234";
-        String encrypted = CryptoUtil.aesEncrypt(plainText);
-        String decrypted = CryptoUtil.aesDecrypt(encrypted);
-
-        assertNotNull(encrypted);
-        assertNotEquals(plainText, encrypted);
-        assertEquals(plainText, decrypted);
-    }
-
-    @Test
-    @DisplayName("AES加密空字符串")
-    void testAesEncryptEmpty() {
-        assertNull(CryptoUtil.aesEncrypt(null));
-        assertEquals("", CryptoUtil.aesEncrypt(""));
-    }
-
-    @Test
-    @DisplayName("AES解密空字符串")
-    void testAesDecryptEmpty() {
-        assertNull(CryptoUtil.aesDecrypt(null));
-        assertEquals("", CryptoUtil.aesDecrypt(""));
-    }
-
-    @Test
-    @DisplayName("AES加密中文")
-    void testAesEncryptChinese() {
-        String plainText = "张三";
-        String encrypted = CryptoUtil.aesEncrypt(plainText);
-        String decrypted = CryptoUtil.aesDecrypt(encrypted);
-
-        assertEquals(plainText, decrypted);
-    }
-
-    @Test
     @DisplayName("MD5加密")
     void testMd5() {
         String text = "hello";

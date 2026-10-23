@@ -88,12 +88,11 @@ public final class UserContext {
      */
     public static void setUser(UserInfo userInfo) {
         if (userInfo == null) {
-            log.warn("设置用户信息为null");
+            clear();
             return;
         }
+        TenantContext.clear();
         USER_HOLDER.set(userInfo);
-        log.debug("设置用户信息：userId={}, username={}, tenantId={}",
-                userInfo.getUserId(), userInfo.getUsername(), userInfo.getTenantId());
 
         // 同时设置租户上下文
         if (userInfo.getTenantId() != null) {

@@ -35,7 +35,7 @@ class CollectionUtilTest {
     @Test
     @DisplayName("默认值")
     void testDefaultIfEmpty() {
-        assertEquals(Collections.emptyList(), CollectionUtil.defaultIfEmpty(null));
+        assertEquals(Collections.emptyList(), CollectionUtil.defaultIfEmpty((List<String>) null));
         assertEquals(Collections.emptyList(), CollectionUtil.defaultIfEmpty(List.of()));
         assertEquals(List.of("a"), CollectionUtil.defaultIfEmpty(List.of("a")));
 

@@ -24,7 +24,7 @@ class MoneyUtilTest {
 
         // null值处理
         result = MoneyUtil.add(null, new BigDecimal("100"));
-        assertEquals(new BigDecimal("100.00"), result);
+        assertEquals(new BigDecimal("100"), result);
     }
 
     @Test

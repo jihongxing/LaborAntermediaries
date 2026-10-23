@@ -1,5 +1,7 @@
 # 贡献指南
 
+> 后端运行与测试说明已更新：以 `backend/README.md` 为准。当前使用 Java 17 + PostgreSQL 16 + Flyway，不依赖 MySQL、Redis 或手工业务初始化脚本；完整验证使用专用 PostgreSQL 测试库执行 `mvn -Pintegration clean verify`。旧 SaaS 业务示例仅保留历史参考。
+
 欢迎参与劳务中介管理系统的开发！本文档将帮助你了解如何为项目做出贡献。
 
 ---

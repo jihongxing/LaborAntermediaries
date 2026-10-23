@@ -47,7 +47,9 @@ class ValidationUtilTest {
     @DisplayName("身份证号校验测试")
     void testIdCard() {
         // 有效身份证号（18位）
-        assertTrue(ValidationUtil.isIdCard("110101199001011234")); // 示例身份证
+        assertTrue(ValidationUtil.isIdCard("110101199001011237"));
+        assertFalse(ValidationUtil.isIdCard("110101199001011234"));
+        assertFalse(ValidationUtil.isIdCard(null));
 
         // 无效身份证号
         assertFalse(ValidationUtil.isIdCard("11010119900101123")); // 不足18位
@@ -58,27 +60,31 @@ class ValidationUtilTest {
     @Test
     @DisplayName("身份证提取出生日期测试")
     void testExtractBirthday() {
-        String birthday = ValidationUtil.extractBirthday("110101199001011234");
+        String birthday = ValidationUtil.extractBirthday("110101199001011237");
         assertEquals("1990-01-01", birthday);
+        assertNull(ValidationUtil.extractBirthday("110101199001011234"));
     }
 
     @Test
     @DisplayName("身份证提取性别测试")
     void testExtractGender() {
         // 倒数第2位为奇数，男性
-        int gender1 = ValidationUtil.extractGender("110101199001011234");
+        int gender1 = ValidationUtil.extractGender("110101199001011237");
         assertEquals(1, gender1);
 
         // 倒数第2位为偶数，女性
-        int gender2 = ValidationUtil.extractGender("110101199001012345");
+        int gender2 = ValidationUtil.extractGender("110101199001012344");
         assertEquals(2, gender2);
+        assertEquals(0, ValidationUtil.extractGender("110101199001011234"));
     }
 
     @Test
     @DisplayName("银行卡号校验测试")
     void testBankCard() {
         // Luhn算法测试（这里用示例卡号）
-        assertTrue(ValidationUtil.isBankCard("6217001234567890123"));
+        assertTrue(ValidationUtil.isBankCard("6217001234567890122"));
+        assertFalse(ValidationUtil.isBankCard("6217001234567890123"));
+        assertFalse(ValidationUtil.isBankCard(null));
 
         // 无效银行卡号
         assertFalse(ValidationUtil.isBankCard("621700123456789")); // 不足16位

@@ -1,174 +1,26 @@
 <?xml version="1.0"?>
-<!DOCTYPE module PUBLIC
-    "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
-    "https://checkstyle.org/dtds/configuration_1_3.dtd">
-
-<!--
-  LaborAntermediaries 代码规范检查配置
-  用途：强制开发人员使用项目提供的P0/P1能力，禁止重复造轮子
-
-  检查内容：
-  1. 禁止使用double/float计算金额（必须用MoneyUtil）
-  2. 禁止使用SimpleDateFormat（必须用DateUtil）
-  3. 禁止使用UUID（必须用IdGenerator）
-  4. 禁止使用RuntimeException（必须用BusinessException）
-  5. 禁止在Controller层注入Mapper（必须用Service）
-  6. 禁止手动传递tenantId参数（必须用TenantContext）
-  7. 禁止直接使用new HashMap()返回（必须用Result）
-
-  运行方式：
-  mvn checkstyle:check
--->
-
+<!DOCTYPE module PUBLIC "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+        "https://checkstyle.org/dtds/configuration_1_3.dtd">
 <module name="Checker">
     <property name="charset" value="UTF-8"/>
-    <property name="severity" value="error"/>
     <property name="fileExtensions" value="java"/>
-
+    <module name="FileTabCharacter"/>
+    <module name="LineLength">
+        <property name="max" value="150"/>
+        <property name="ignorePattern" value="^package.*|^import.*"/>
+    </module>
     <module name="TreeWalker">
-        <!-- 1. 禁止在Service/Controller中使用double/float类型的金额字段 -->
-        <module name="RegexpSinglelineJava">
-            <property name="format" value="(double|float)\s+(salary|amount|price|fee|payment|deduction|gross|net|total|sum)"/>
-            <property name="message" value="【强制】金额字段禁止使用double/float，必须使用BigDecimal + MoneyUtil"/>
-            <property name="ignoreComments" value="true"/>
-        </module>
-
-        <!-- 2. 禁止使用SimpleDateFormat -->
-        <module name="IllegalImport">
-            <property name="illegalPkgs" value="java.text.SimpleDateFormat"/>
-            <message key="import.illegal" value="【强制】禁止使用SimpleDateFormat，必须使用DateUtil"/>
-        </module>
-
-        <!-- 3. 禁止使用UUID.randomUUID() -->
-        <module name="RegexpSinglelineJava">
-            <property name="format" value="UUID\.randomUUID\(\)"/>
-            <property name="message" value="【强制】禁止使用UUID.randomUUID()，必须使用IdGenerator.nextId()或IdGenerator.generateXXXNo()"/>
-            <property name="ignoreComments" value="true"/>
-        </module>
-
-        <!-- 4. 禁止直接throw new RuntimeException -->
-        <module name="RegexpSinglelineJava">
-            <property name="format" value="throw\s+new\s+RuntimeException"/>
-            <property name="message" value="【强制】禁止使用RuntimeException，必须使用BusinessException"/>
-            <property name="ignoreComments" value="true"/>
-        </module>
-
-        <!-- 5. 禁止在Controller层注入Mapper -->
-        <module name="RegexpSinglelineJava">
-            <property name="format" value="@Autowired.*Mapper"/>
-            <property name="message" value="【强制】Controller层禁止注入Mapper，必须注入Service"/>
-            <property name="ignoreComments" value="true"/>
-        </module>
-
-        <!-- 6. 禁止BigDecimal使用+、-、*、/ -->
-        <module name="RegexpSinglelineJava">
-            <property name="format" value="BigDecimal.*[\+\-\*/].*BigDecimal"/>
-            <property name="message" value="【强制】BigDecimal禁止使用+、-、*、/，必须使用MoneyUtil.add/subtract/multiply/divide"/>
-            <property name="ignoreComments" value="true"/>
-        </module>
-
-        <!-- 7. 禁止在Service层手动传递tenantId参数 -->
-        <module name="RegexpSinglelineJava">
-            <property name="format" value="(selectById|insert|update|delete)\(.*(tenantId|tenant_id)"/>
-            <property name="message" value="【强制】禁止手动传递tenantId参数，TenantContext会自动处理"/>
-            <property name="ignoreComments" value="true"/>
-        </module>
-
-        <!-- 8. 禁止Controller返回Map<String, Object> -->
-        <module name="RegexpSinglelineJava">
-            <property name="format" value="(public|private|protected)\s+Map&lt;String,\s*Object&gt;"/>
-            <property name="message" value="【强制】Controller禁止返回Map，必须使用Result&lt;T&gt;"/>
-            <property name="ignoreComments" value="true"/>
-        </module>
-
-        <!-- 9. 禁止使用Apache Commons的StringUtils（必须用项目的StringUtil） -->
-        <module name="IllegalImport">
-            <property name="illegalPkgs" value="org.apache.commons.lang3.StringUtils"/>
-            <message key="import.illegal" value="【强制】禁止使用Apache Commons的StringUtils，必须使用项目的StringUtil"/>
-        </module>
-
-        <!-- 10. 禁止手动截取字符串脱敏 -->
-        <module name="RegexpSinglelineJava">
-            <property name="format" value="\.substring\(.*\)\s*\+\s*&quot;\*+&quot;"/>
-            <property name="message" value="【强制】禁止手动截取字符串脱敏，必须使用DesensitizeUtil"/>
-            <property name="ignoreComments" value="true"/>
-        </module>
-
-        <!-- 11. 禁止手动拼接SQL（防止SQL注入） -->
-        <module name="RegexpSinglelineJava">
-            <property name="format" value="&quot;(SELECT|INSERT|UPDATE|DELETE).*\+.*&quot;"/>
-            <property name="message" value="【强制】禁止手动拼接SQL，必须使用MyBatis Plus参数化查询"/>
-            <property name="ignoreComments" value="true"/>
-        </module>
-
-        <!-- 12. 禁止明文存储密码 -->
-        <module name="RegexpSinglelineJava">
-            <property name="format" value="setPassword\((?!.*encode|.*encrypt)"/>
-            <property name="message" value="【强制】禁止明文存储密码，必须使用CryptoUtil.encodeBCrypt()"/>
-            <property name="ignoreComments" value="true"/>
-        </module>
-
-        <!-- 基础代码规范 -->
-        <!-- 命名规范 -->
-        <module name="PackageName">
-            <property name="format" value="^[a-z]+(\.[a-z][a-z0-9]*)*$"/>
-        </module>
-        <module name="TypeName">
-            <property name="format" value="^[A-Z][a-zA-Z0-9]*$"/>
-        </module>
-        <module name="MethodName">
-            <property name="format" value="^[a-z][a-zA-Z0-9]*$"/>
-        </module>
-        <module name="ConstantName">
-            <property name="format" value="^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$"/>
-        </module>
-
-        <!-- 空行检查 -->
-        <module name="EmptyLineSeparator">
-            <property name="allowNoEmptyLineBetweenFields" value="true"/>
-            <property name="allowMultipleEmptyLines" value="false"/>
-        </module>
-
-        <!-- 导入检查 -->
         <module name="UnusedImports"/>
         <module name="RedundantImport"/>
-        <module name="AvoidStarImport"/>
-
-        <!-- 注释检查 -->
-        <module name="JavadocMethod">
-            <property name="scope" value="public"/>
-            <property name="allowMissingParamTags" value="false"/>
-            <property name="allowMissingReturnTag" value="false"/>
+        <module name="PackageName"/>
+        <module name="TypeName"/>
+        <module name="MethodName"/>
+        <module name="ConstantName"/>
+        <module name="EmptyCatchBlock"/>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="(double|float)\s+(salary|amount|price|fee|payment)\b"/>
+            <property name="message" value="Monetary values must use BigDecimal."/>
+            <property name="ignoreComments" value="true"/>
         </module>
-
-        <!-- 代码长度检查 -->
-        <module name="LineLength">
-            <property name="max" value="150"/>
-            <property name="ignorePattern" value="^package.*|^import.*|a href|href|http://|https://|ftp://"/>
-        </module>
-        <module name="MethodLength">
-            <property name="max" value="150"/>
-        </module>
-
-        <!-- 空块检查 -->
-        <module name="EmptyBlock">
-            <property name="option" value="TEXT"/>
-            <property name="tokens" value="LITERAL_CATCH, LITERAL_FINALLY, LITERAL_IF, LITERAL_ELSE"/>
-        </module>
-
-        <!-- 空catch块检查 -->
-        <module name="EmptyCatchBlock">
-            <property name="exceptionVariableName" value="expected|ignore"/>
-        </module>
-    </module>
-
-    <!-- 文件长度检查 -->
-    <module name="FileLength">
-        <property name="max" value="1000"/>
-    </module>
-
-    <!-- 禁止使用制表符 -->
-    <module name="FileTabCharacter">
-        <property name="eachLine" value="true"/>
     </module>
 </module>

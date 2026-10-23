@@ -206,7 +206,7 @@ public final class AssertUtil {
      * @throws BusinessException 如果相等
      */
     public static void notEquals(Object actual, Object expected, String message) {
-        if (actual != null && actual.equals(expected)) {
+        if (java.util.Objects.equals(actual, expected)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, message);
         }
     }

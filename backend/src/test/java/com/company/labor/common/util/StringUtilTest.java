@@ -60,7 +60,7 @@ class StringUtilTest {
         assertEquals("employeeName", StringUtil.toCamelCase("employee_name"));
         assertEquals("employeebasic", StringUtil.toCamelCase("employeeBasic"));
         assertEquals("abc", StringUtil.toCamelCase("abc"));
-        assertEquals("abcdefghi", StringUtil.toCamelCase("abc_def_ghi"));
+        assertEquals("abcDefGhi", StringUtil.toCamelCase("abc_def_ghi"));
         assertNull(StringUtil.toCamelCase(null));
         assertEquals("", StringUtil.toCamelCase(""));
     }

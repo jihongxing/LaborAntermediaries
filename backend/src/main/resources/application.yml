@@ -1,74 +1,71 @@
 spring:
   application:
     name: labor-backend
-
-  # 数据源配置
   datasource:
-    driver-class-name: org.postgresql.Driver
-    url: jdbc:postgresql://localhost:5432/labor_db?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf8
-    username: postgres
-    password: password
-
-  # Jackson配置
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/labor_db}
+    username: ${DB_USERNAME:labor}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 10000
+  flyway:
+    enabled: true
+    clean-disabled: true
   jackson:
-    # 日期格式
-    date-format: yyyy-MM-dd HH:mm:ss
-    # 时区
     time-zone: Asia/Shanghai
-    # 序列化配置
     serialization:
-      # 禁用将日期序列化为时间戳
       write-dates-as-timestamps: false
-    # 反序列化配置
     deserialization:
-      # 忽略未知字段
-      fail-on-unknown-properties: false
-
-# MyBatis Plus配置
-mybatis-plus:
-  # Mapper XML文件位置
-  mapper-locations: classpath*:/mapper/**/*.xml
-  # 实体类扫描路径
-  type-aliases-package: com.company.labor.*.entity
-  # 全局配置
-  global-config:
-    db-config:
-      # 主键类型（AUTO表示数据库自增）
-      id-type: AUTO
-      # 逻辑删除字段名
-      logic-delete-field: deletedAt
-      # 逻辑删除值（删除时设置为当前时间戳）
-      logic-delete-value: "now()"
-      # 逻辑未删除值
-      logic-not-delete-value: "null"
-  # 配置
-  configuration:
-    # 驼峰转下划线
-    map-underscore-to-camel-case: true
-    # 日志实现（开发环境使用，生产环境关闭）
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
-
-# 服务器配置
+      fail-on-unknown-properties: true
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
 server:
-  port: 8080
+  port: ${PORT:8080}
+  shutdown: graceful
+  forward-headers-strategy: none
   servlet:
     context-path: /api
-  # Tomcat配置
-  tomcat:
-    uri-encoding: UTF-8
-    threads:
-      max: 200
-      min-spare: 10
-
-# 日志配置
+  error:
+    include-message: never
+    include-stacktrace: never
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+foundation:
+  security:
+    public-key: ${JWT_PUBLIC_KEY:}
+    issuer: ${JWT_ISSUER:labor-identity}
+    audience: ${JWT_AUDIENCE:labor-backend}
+  crypto:
+    active-key: ${CRYPTO_ACTIVE_KEY:}
+  storage:
+    root: ${STORAGE_ROOT:./var/private-files}
+  tasks:
+    enabled: ${TASKS_ENABLED:false}
 logging:
   level:
-    # 根日志级别
     root: INFO
-    # 业务日志级别
-    com.company.labor: DEBUG
-    # SQL日志级别
-    com.company.labor.*.mapper: DEBUG
-  # 日志文件
-  file:
-    name: logs/labor.log
+    com.company.labor: INFO

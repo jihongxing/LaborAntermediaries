@@ -2,120 +2,100 @@ package com.company.labor.common.config;
 
 import com.baomidou.mybatisplus.annotation.DbType;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
+import com.baomidou.mybatisplus.extension.plugins.handler.TenantLineHandler;
+import com.baomidou.mybatisplus.extension.plugins.inner.OptimisticLockerInnerInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.TenantLineInnerInterceptor;
-import com.company.labor.common.context.TenantContext;
+import com.company.labor.foundation.FoundationProperties;
+import com.company.labor.foundation.context.ExecutionContext;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.LongValue;
+import net.sf.jsqlparser.statement.insert.Insert;
+import net.sf.jsqlparser.statement.update.Update;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * MyBatis Plus配置
- *
- * <p>配置内容：
- * <ul>
- *   <li>分页插件（PaginationInnerInterceptor）</li>
- *   <li>租户插件（TenantLineInnerInterceptor）- 自动在SQL中注入tenant_id</li>
- * </ul>
- *
- * <p>租户插件工作原理：
- * <pre>
- * 原始SQL：SELECT * FROM employee WHERE name = ?
- * 注入后：SELECT * FROM employee WHERE name = ? AND tenant_id = 1001
- * </pre>
- *
- * @author 技术团队
- * @since 2026-10-18
- */
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
+
 @Configuration
 public class MyBatisPlusConfig {
 
-    /**
-     * MyBatis Plus拦截器
-     */
     @Bean
-    public MybatisPlusInterceptor mybatisPlusInterceptor() {
-        MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
-
-        // 租户插件（必须在分页插件之前）
-        interceptor.addInnerInterceptor(tenantLineInnerInterceptor());
-
-        // 分页插件
-        interceptor.addInnerInterceptor(paginationInnerInterceptor());
-
-        return interceptor;
-    }
-
-    /**
-     * 租户插件
-     */
-    private TenantLineInnerInterceptor tenantLineInnerInterceptor() {
-        return new TenantLineInnerInterceptor() {
-            /**
-             * 获取租户ID值表达式
-             */
+    public TenantLineHandler tenantLineHandler(FoundationProperties properties) {
+        Set<String> tenantTables = normalized(properties.getTenantTables());
+        Set<String> sharedTables = normalized(properties.getSharedTables());
+        if (tenantTables.stream().anyMatch(sharedTables::contains)) {
+            throw new IllegalStateException("A table cannot be both isolated and shared");
+        }
+        return new TenantLineHandler() {
             @Override
             public Expression getTenantId() {
-                // 从TenantContext中获取租户ID
-                Long tenantId = TenantContext.getTenantIdOrNull();
-                if (tenantId == null) {
-                    // 如果租户ID为空，返回-1（查询不到任何数据）
-                    return new LongValue(-1);
-                }
-                return new LongValue(tenantId);
+                return new LongValue(ExecutionContext.requireTenant());
             }
 
-            /**
-             * 租户字段名
-             */
-            @Override
-            public String getTenantIdColumn() {
-                return "tenant_id";
-            }
-
-            /**
-             * 判断是否忽略租户
-             *
-             * @param tableName 表名
-             * @return true忽略，false不忽略
-             */
             @Override
             public boolean ignoreTable(String tableName) {
-                // 系统表不需要租户隔离
-                if (tableName.equals("sys_user")
-                    || tableName.equals("sys_role")
-                    || tableName.equals("sys_permission")
-                    || tableName.equals("sys_tenant")) {
+                String normalized = tableName.toLowerCase(Locale.ROOT);
+                if (sharedTables.contains(normalized)) {
                     return true;
                 }
-
-                // 字典表不需要租户隔离（全局共享）
-                if (tableName.startsWith("dict_")) {
-                    return true;
+                if (!tenantTables.contains(normalized)) {
+                    throw new IllegalStateException("MyBatis table has no registered isolation policy: " + tableName);
                 }
-
-                // 其他表都需要租户隔离
+                ExecutionContext.requireTenant();
                 return false;
             }
         };
     }
 
-    /**
-     * 分页插件
-     */
-    private PaginationInnerInterceptor paginationInnerInterceptor() {
-        PaginationInnerInterceptor paginationInterceptor = new PaginationInnerInterceptor();
+    @Bean
+    public MybatisPlusInterceptor mybatisPlusInterceptor(TenantLineHandler tenantLineHandler) {
+        MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
+        interceptor.addInnerInterceptor(new TenantLineInnerInterceptor(tenantLineHandler) {
+            @Override
+            protected void processInsert(Insert insert, int index, String sql, Object context) {
+                if (!tenantLineHandler.ignoreTable(insert.getTable().getName())) {
+                    if (insert.getColumns() == null || insert.getColumns().stream()
+                            .anyMatch(column -> isTenantColumn(column.getColumnName()))
+                            || insert.getConflictAction() != null || insert.isUseDuplicate()) {
+                        throw new IllegalArgumentException("Tenant columns and upserts must not be supplied by isolated-table inserts");
+                    }
+                }
+                super.processInsert(insert, index, sql, context);
+            }
 
-        // 数据库类型（PostgreSQL）
-        paginationInterceptor.setDbType(DbType.POSTGRE_SQL);
+            @Override
+            protected void processUpdate(Update update, int index, String sql, Object context) {
+                if (!tenantLineHandler.ignoreTable(update.getTable().getName())
+                        && update.getUpdateSets().stream().flatMap(set -> set.getColumns().stream())
+                        .anyMatch(column -> isTenantColumn(column.getColumnName()))) {
+                    throw new IllegalArgumentException("Tenant columns cannot be reassigned");
+                }
+                super.processUpdate(update, index, sql, context);
+            }
 
-        // 单页最大条数（防止一次查询过多数据）
-        paginationInterceptor.setMaxLimit(1000L);
+            private boolean isTenantColumn(String name) {
+                return name.replace("\"", "").equalsIgnoreCase(tenantLineHandler.getTenantIdColumn());
+            }
+        });
+        interceptor.addInnerInterceptor(new OptimisticLockerInnerInterceptor());
+        PaginationInnerInterceptor pagination = new PaginationInnerInterceptor(DbType.POSTGRE_SQL);
+        pagination.setMaxLimit(200L);
+        pagination.setOverflow(false);
+        interceptor.addInnerInterceptor(pagination);
+        return interceptor;
+    }
 
-        // 溢出总页数后是否进行处理（true：返回首页，false：继续查询）
-        paginationInterceptor.setOverflow(false);
-
-        return paginationInterceptor;
+    private Set<String> normalized(Set<String> names) {
+        Set<String> result = new HashSet<>();
+        for (String name : names) {
+            if (!name.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+                throw new IllegalStateException("Use unqualified table names in isolation configuration");
+            }
+            result.add(name.toLowerCase(Locale.ROOT));
+        }
+        return Set.copyOf(result);
     }
 }

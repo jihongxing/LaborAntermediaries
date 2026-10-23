@@ -56,8 +56,11 @@ public final class TenantContext {
      */
     public static void setTenantId(Long tenantId) {
         if (tenantId == null) {
-            log.warn("设置租户ID为null，可能导致数据隔离失败");
+            clear();
             return;
+        }
+        if (tenantId <= 0) {
+            throw new IllegalArgumentException("Tenant identifier must be positive");
         }
         TENANT_ID_HOLDER.set(tenantId);
         log.debug("设置租户ID：{}", tenantId);

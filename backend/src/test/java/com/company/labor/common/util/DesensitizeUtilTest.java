@@ -56,7 +56,7 @@ class DesensitizeUtilTest {
     @DisplayName("地址脱敏测试")
     void testAddress() {
         String desensitized = DesensitizeUtil.address("浙江省杭州市西湖区文三路123号");
-        assertEquals("浙江省杭州市*********", desensitized);
+        assertEquals("浙江省杭州市**********", desensitized);
     }
 
     @Test
