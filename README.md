@@ -25,11 +25,17 @@
 
 | 目录 | 内容 |
 | --- | --- |
-| `backend/` | Spring Boot、MyBatis Plus、PostgreSQL 的后端基础能力与项目说明。 |
-| `frontend/` | Web 管理后台、独立 App、微信小程序的目录与规划文档；请查看各端目录的实际代码状态。 |
-| `database/` | 数据库脚本与说明。 |
-| `docs/` | 当前平台需求与设计文档，以及历史 SaaS/定制交付资料。 |
-| `infrastructure/` | 基础设施资料。 |
+| [backend/](backend/README.md) | 非业务后端底座、源码、测试与接入约束。 |
+| [frontend/](frontend/README.md) | Web、独立 App、小程序的规划与工程约定；尚未形成可运行应用。 |
+| [database/](database/README.md) | 数据库设计参考与预留目录；实际迁移以 backend 内的 Flyway 脚本为准。 |
+| [docs/](docs/README.md) | 当前需求、设计、制度与历史资料索引。 |
+| [infrastructure/](infrastructure/README.md) | 部署设施预留目录与安全约定，尚无完整部署实现。 |
+| [.github/](.github/README.md) | 协作模板和 CI/CD 工作流。 |
+| [.gstack/](.gstack/README.md) | 本地浏览器工具产物；除说明外不提交。 |
+| [logs/](logs/README.md) | 从仓库根目录运行时产生的本地日志；除说明外不提交。 |
+| [tools/](tools/README.md) | 辅助工具、预留工具目录与运行边界。 |
+
+各目录 README 说明用途、维护约定和禁止事项；修改前同时遵守根目录工程与文档治理规范。`.git/` 是 Git 内部数据，不添加项目说明或手工修改。`backend/target/` 是可清理重建的 Maven 产物，不放置需长期维护的文件，其约定见后端 README。
 
 历史文档及基础代码中的“已完成”仅对应当时范围，不等于当前平台 PRD 已交付。实施顺序及尚未定案的功能应以最新需求与评审结论为准。
 
