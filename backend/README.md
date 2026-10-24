@@ -4,10 +4,25 @@
 
 设计边界与验收依据：[通用后端底座建设方案](../docs/02-开发阶段/技术方案/通用后端底座建设方案-v1.md)。
 
+供应链定位下的能力矩阵、错误码目录、跨组织授权及版本/金额/可靠投递接入：
+[劳务供应链平台底座能力与接入契约](docs/supply-chain-foundation.md)。业务术语见 [CONTEXT.md](../CONTEXT.md)。
+金额类的允许与禁止使用场景见 [money 包使用指南](src/main/java/com/company/labor/common/money/README.md)。
+高精度单价、中间计算、动态比例和尾差处理见 [计价精度契约](docs/pricing-precision.md)；不预置分成档位或税率。
+
+## 代码注释要求
+
+所有新增或修改代码必须遵守 [后端注释规则](AGENTS.md) 和 [全项目注释规范](../CLAUDE.md#注释规范强制)：
+Java 类型、手写方法（含 private、重写方法和构造器）、字段与配置项必须有中文说明，关键安全、事务和并发逻辑解释设计原因。
+record 组件通过类型 JavaDoc 的 `@param` 说明；不逐行翻译代码，不改写 Lombok 生成方法。
+
+`mvn validate` 已对 `foundation/` 和 `common/` 下生产 Java 代码启用类型与方法 JavaDoc 缺失检查，包含 private 方法，
+不豁免 `@Override`。其他目录同样受规则约束，但历史缺口尚未纳入此自动检查；字段、参数标签和注释准确性仍须审查。
+
 ## 目录职责与维护约定
 
 - [src/](src/README.md)：正式源码、资源与测试；数据库版本变更统一使用 `src/main/resources/db/migration/` 的 Flyway 迁移。
 - [logs/](logs/README.md)：本地运行日志，除说明外不提交。
+- [docs/](docs/supply-chain-foundation.md)：后端能力契约与接入说明；产品需求和全项目技术方案仍归仓库根 `docs/`。
 - `target/`：Maven 构建、测试与覆盖率产物，由构建工具生成并忽略；`mvn clean` 会删除它，不在其中维护 README 或任何唯一资料。
 - `pom.xml`、`checkstyle.xml`、`compose.yml` 分别维护依赖与验证、代码风格、本地依赖环境；变更应同步说明和测试。
 - 必须保持组织隔离、权限校验、审计和错误契约；基础能力与业务规则分离，业务接入遵守下文准入要求。
@@ -30,13 +45,18 @@ backend/
 │   │   ├── java/com/company/labor/
 │   │   │   ├── LaborApplication.java
 │   │   │   ├── common/                    通用契约与无业务归属的纯工具
+│   │   │   │   ├── error/                 稳定错误契约与平台错误目录
+│   │   │   │   ├── money/                 单价、中间计算、最终金额与守恒分配
+│   │   │   │   └── resource/              不含所有权假设的资源引用
 │   │   │   ├── foundation/                非业务基础能力
+│   │   │   │   ├── access/                资源授权扩展点与独立复核守卫
 │   │   │   │   ├── audit/                 操作审计
 │   │   │   │   ├── context/               执行身份与组织上下文
 │   │   │   │   ├── crypto/                加密与密钥使用
 │   │   │   │   ├── persistence/           通用持久化支持
 │   │   │   │   ├── reliability/           幂等与可靠执行
 │   │   │   │   ├── security/              认证、权限与令牌撤销
+│   │   │   │   ├── snapshot/              资源级授权的追加式版本快照
 │   │   │   │   ├── storage/               私有文件存取
 │   │   │   │   ├── tasks/                 可靠任务调度
 │   │   │   │   └── web/                   Web 协议与序列化支持
@@ -180,6 +200,8 @@ foundation:
 ### HTTP 与序列化
 
 - JSON API 使用 `Result<T>`；异常返回真实 HTTP 状态。文件下载、Actuator 和 OpenAPI 不强制包裹 `Result`。
+- 新错误使用 `ErrorDefinition` 与 `PlatformError`：数字业务码、`errorKey`、HTTP 状态分离，并关联 `requestId`。
+  成功仍为 `code=200`，失败不能再用 `code==401` 判断认证；历史数字工厂保留兼容。完整分配与迁移规则见能力契约第 3 节。
 - `Long` 和 `long` 均序列化为字符串，避免前端编号精度丢失；金额与精度计算使用 `BigDecimal`。
 - JSON 请求体上限 1 MiB（包含无 Content-Length 的请求），multipart 单文件 10 MiB、总请求 11 MiB；存储服务另有可配置上限。
 - 参数校验不回显被拒绝的敏感值；日志不记录请求体、响应体或 Bearer 内容。反向代理也应配置请求大小、速率、连接和读取超时。
@@ -227,7 +249,11 @@ mvn -Pintegration clean verify
 
 CI 使用 Java 17 + PostgreSQL 16，执行 Checkstyle、全部单元测试、打包、Failsafe 集成测试和 JaCoCo 报告，失败不跳过。报告在 `target/surefire-reports`、`target/failsafe-reports`、`target/site/jacoco/index.html`。覆盖率统计全部项目类，不对第三方 SQL 解析器做字节码插桩；Maven `verify` 强制检查全后端 **LINE ≥80%**，未排除低覆盖类。仅运行 `mvn test` 不执行完整集成与覆盖门禁。
 
-2026-10-23 本机以 Java 17 + 独立 PostgreSQL 16.4 执行 `mvn -B -ntp -Pintegration clean verify` 成功：116 项单元测试 + 18 项集成测试全部通过，失败/错误/跳过均为 0；Checkstyle 0 违规。单次 clean 构建的全后端行覆盖 **86.43%（1051/1216）**，分支覆盖 **76.63%（600/783）**。原 7 项存量失败已修复，并增加断言空值相等回归测试；未降低校验强度。远端 CI 尚未执行。
+2026-10-25 本机以 Java 17 + 独立隔离 PostgreSQL 16.4 测试库执行 `mvn -B -ntp -Pintegration clean verify` 成功：
+170 项单元测试 + 25 项集成测试全部通过，失败/错误/跳过均为 0；Checkstyle 0 违规。
+单次 clean 构建的全后端行覆盖 **88.76%（1334/1503）**，分支覆盖 **79.29%（735/927）**，未降低校验强度。
+包含资源级跨组织授权、版本并发与历史保留、同事务回滚、任务投递，以及高精度计价、动态比例分配、
+尾差守恒和 PostgreSQL 精度存储验证。远端 CI 未在本轮触发。
 
 ### 业务开发准入
 
@@ -240,4 +266,9 @@ CI 使用 Java 17 + PostgreSQL 16，执行 Checkstyle、全部单元测试、打
 - 已移除固定密钥 ECB 加密、静态 `JsonUtil`、进程内 `IdGenerator` 和参数/返回值日志切面，分别使用 `CryptoService`、`JsonCodec`、`SequenceIds` 和最小化请求日志。旧 ECB 密文不自动兼容，若已有数据需另做离线迁移。
 - Checkstyle 修正了旧配置的无效层级及过时选项，保留可执行的编码、命名、导入、行长和金额类型规则；不新增格式化工具。
 - 保留旧工具类供兼容，不代表它们全部经过本轮重新设计。`MoneyUtil` 加减法保留输入精度，乘除法默认两位小数舍入，不适合不允许中间舍入的通用高精度计算。
+- 新交易的最终金额使用 `common/money/Money`，按币种精确到最小单位；单价与中间值分别使用 `UnitPrice`、`CalculatedAmount`，不能提前按分舍入。
+- 比例全部由业务显式提供，无固定档位或默认值；`CalculationPolicy` 指定除法与结算舍入，`MoneyAllocation` 提供两种显式选择的守恒分配方法。
+- 新计价不得使用已弃用的 `MoneyUtil.multiply/divide` 默认两位乘除；高精度值 JSON 传十进制字符串，旧 `yuanToFen` 对分以下非零精度及溢出拒绝而非截断。
+- `ResourceAccessGuard` 默认拒绝未知资源策略，平台角色无隐含全局权限；`VersionedSnapshots` 保留历史版本但不代表审批、签约、结算或付款成功。
+- `TaskQueue.enqueueTransactional` 强制同库现有事务，业务修改与投递共同提交；外部处理仍至少一次，必须另行设计幂等、未知态和补偿。
 - 当前不是“生产就绪”承诺；生产前仍需依赖漏洞与补丁评估、容量与容灾演练、密钥托管、日志访问控制、备份恢复和完整身份/业务资源授权接入。迁移账号与运行账号应分离并采用最小权限，不能把开发数据库的 DDL 权限当成生产默认配置。

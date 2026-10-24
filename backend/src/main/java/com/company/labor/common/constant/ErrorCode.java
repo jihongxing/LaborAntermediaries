@@ -1,7 +1,7 @@
 package com.company.labor.common.constant;
 
 /**
- * 错误码常量
+ * 历史错误码常量，保留以兼容已有调用；新底座使用 common.error.PlatformError。
  *
  * <p>错误码规则：
  * <ul>
@@ -10,7 +10,7 @@ package com.company.labor.common.constant;
  *   <li>500-599 - 服务器错误（系统异常等）</li>
  * </ul>
  *
- * <p>业务错误码规则（400-499）：
+ * <p>历史业务错误码分组（不是 HTTP 状态码，保留供兼容使用，不代表当前模块边界）：
  * <ul>
  *   <li>1000-1099 - 员工模块</li>
  *   <li>2000-2099 - 工资模块</li>
@@ -24,6 +24,7 @@ package com.company.labor.common.constant;
  */
 public final class ErrorCode {
 
+    /** 禁止实例化错误码常量类。 */
     private ErrorCode() {
         // 私有构造函数，防止实例化
     }

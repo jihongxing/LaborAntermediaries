@@ -464,10 +464,10 @@ class FoundationIT {
             assertThrows(BusinessException.class, () -> files.open("../../secret.txt"));
         }
         try (var ignored = scope(8, 11)) {
-            assertEquals(403, assertThrows(BusinessException.class, () -> files.open(metadata.id())).getCode());
+            assertEquals(403, assertThrows(BusinessException.class, () -> files.open(metadata.id())).getHttpStatus());
         }
         try (var ignored = scope(7, 22)) {
-            assertEquals(404, assertThrows(BusinessException.class, () -> files.open(metadata.id())).getCode());
+            assertEquals(404, assertThrows(BusinessException.class, () -> files.open(metadata.id())).getHttpStatus());
         }
         assertEquals(3, jdbc.queryForObject("SELECT COUNT(*) FROM foundation_audit", Integer.class));
     }
@@ -476,7 +476,7 @@ class FoundationIT {
     void oversizeAndRolledBackFilesLeaveNoMetadataOrPhysicalFiles() throws Exception {
         try (var ignored = scope(7, 11)) {
             assertEquals(413, assertThrows(BusinessException.class,
-                    () -> files.store(new ByteArrayInputStream(new byte[33]), "large")).getCode());
+                    () -> files.store(new ByteArrayInputStream(new byte[33]), "large")).getHttpStatus());
             new TransactionTemplate(manager).executeWithoutResult(status -> {
                 files.store(new ByteArrayInputStream(new byte[3]), "rollback");
                 status.setRollbackOnly();

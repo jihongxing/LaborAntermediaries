@@ -8,15 +8,16 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.Serializable;
 
 /**
- * 用户上下文
+ * 为旧代码保留的线程级用户信息桥接上下文。
  *
- * <p>使用ThreadLocal存储当前登录用户信息，方便在Service层获取。
+ * <p>存储可变用户信息引用，方便旧代码读取，不代替 ExecutionContext 的可信身份和权限。
+ * ThreadLocal 不会自动传播到异步线程，调用方必须负责清理。
  *
  * <p>工作流程：
  * <ol>
- *   <li>用户登录后，生成token（JWT）</li>
- *   <li>在拦截器中，从token中解析用户信息</li>
- *   <li>将用户信息放入UserContext</li>
+ *   <li>安全链验证外部颁发的令牌并建立 ExecutionContext</li>
+ *   <li>从已认证的执行上下文提取兼容用户信息</li>
+ *   <li>将兼容信息放入UserContext，同时同步 TenantContext</li>
  *   <li>在Service层通过UserContext获取当前用户信息</li>
  *   <li>请求结束后，清除UserContext（防止内存泄漏）</li>
  * </ol>
@@ -42,6 +43,7 @@ import java.io.Serializable;
 @Slf4j
 public final class UserContext {
 
+    /** 禁止实例化线程上下文工具类。 */
     private UserContext() {
         // 私有构造函数，防止实例化
     }
@@ -52,12 +54,13 @@ public final class UserContext {
     private static final ThreadLocal<UserInfo> USER_HOLDER = new ThreadLocal<>();
 
     /**
-     * 用户信息
+     * 兼容用户信息载体；字段可变，不应作为独立的授权凭据。
      */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
     public static class UserInfo implements Serializable {
+        /** 兼容用户信息的序列化版本。 */
         private static final long serialVersionUID = 1L;
 
         /**
@@ -82,9 +85,10 @@ public final class UserContext {
     }
 
     /**
-     * 设置用户信息
+     * 保存用户信息引用，先清除旧租户信息，再同步新租户；不创建可信执行上下文。
      *
-     * @param userInfo 用户信息
+     * @param userInfo 用户信息，null 表示清除用户及兼容租户信息
+     * @throws IllegalArgumentException 新租户ID非正数，此时用户引用已保存但租户同步失败
      */
     public static void setUser(UserInfo userInfo) {
         if (userInfo == null) {
@@ -104,6 +108,7 @@ public final class UserContext {
      * 获取用户信息
      *
      * @return 用户信息
+     * @throws IllegalStateException 当前线程尚未设置用户信息
      */
     public static UserInfo getUser() {
         UserInfo userInfo = USER_HOLDER.get();
@@ -127,6 +132,7 @@ public final class UserContext {
      * 获取用户ID
      *
      * @return 用户ID
+     * @throws IllegalStateException 当前线程尚未设置用户信息
      */
     public static Long getUserId() {
         return getUser().getUserId();
@@ -146,6 +152,7 @@ public final class UserContext {
      * 获取用户名
      *
      * @return 用户名
+     * @throws IllegalStateException 当前线程尚未设置用户信息
      */
     public static String getUsername() {
         return getUser().getUsername();
@@ -165,6 +172,7 @@ public final class UserContext {
      * 获取租户ID
      *
      * @return 租户ID
+     * @throws IllegalStateException 当前线程尚未设置用户信息
      */
     public static Long getTenantId() {
         return getUser().getTenantId();
@@ -184,6 +192,7 @@ public final class UserContext {
      * 获取角色编码
      *
      * @return 角色编码
+     * @throws IllegalStateException 当前线程尚未设置用户信息
      */
     public static String getRoleCode() {
         return getUser().getRoleCode();
@@ -200,7 +209,7 @@ public final class UserContext {
     }
 
     /**
-     * 清除用户信息
+     * 清除当前线程的兼容用户及租户信息，不清除 ExecutionContext 或 MDC。
      */
     public static void clear() {
         UserInfo userInfo = USER_HOLDER.get();
@@ -221,7 +230,7 @@ public final class UserContext {
     }
 
     /**
-     * 判断当前用户是否是管理员
+     * 检查兼容角色字段是否等于 admin，不替代可信上下文的权限校验。
      *
      * @return true是管理员，false不是
      */

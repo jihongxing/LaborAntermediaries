@@ -10,6 +10,7 @@ import com.company.labor.common.constant.ErrorCode;
  */
 public class NotFoundException extends BusinessException {
 
+    /** 资源缺失异常的序列化版本。 */
     private static final long serialVersionUID = 1L;
 
     /**

@@ -1,6 +1,7 @@
 package com.company.labor.common;
 
 import com.company.labor.common.constant.ErrorCode;
+import com.company.labor.common.error.ErrorDefinition;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Data;
 
@@ -9,7 +10,8 @@ import java.io.Serializable;
 /**
  * 统一响应结果
  *
- * <p>所有API接口必须返回此格式，保证前端统一处理。
+ * <p>JSON API 使用此响应体，二进制下载及流式响应不强制包装；HTTP 状态由调用层设置。
+ * null 字段在 JSON 序列化时省略。
  *
  * <p>成功响应示例：
  * <pre>
@@ -26,7 +28,6 @@ import java.io.Serializable;
  * {
  *   "code": 1001,
  *   "message": "员工不存在",
- *   "data": null,
  *   "timestamp": 1697520000000
  * }
  * </pre>
@@ -54,6 +55,7 @@ import java.io.Serializable;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class Result<T> implements Serializable {
 
+    /** 统一响应对象的序列化版本。 */
     private static final long serialVersionUID = 1L;
 
     /**
@@ -65,6 +67,12 @@ public class Result<T> implements Serializable {
      * 响应消息
      */
     private String message;
+
+    /** 稳定错误标识，成功或历史数字码响应可为空。 */
+    private String errorKey;
+
+    /** 当前请求关联标识，由 Web 适配层设置，不作为身份凭证。 */
+    private String requestId;
 
     /**
      * 响应数据
@@ -133,6 +141,19 @@ public class Result<T> implements Serializable {
     }
 
     // ==================== 失败响应 ====================
+
+    /**
+     * 按错误契约生成响应体；真实 HTTP 状态仍由 Web 适配层设置。
+     * @param error 稳定错误定义
+     * @param <T> 数据类型
+     * @return 包含业务码、错误标识及默认提示的响应体
+     */
+    public static <T> Result<T> error(ErrorDefinition error) {
+        error.validate();
+        Result<T> result = new Result<>(error.code(), error.message(), null);
+        result.setErrorKey(error.key());
+        return result;
+    }
 
     /**
      * 失败（使用错误码默认消息）

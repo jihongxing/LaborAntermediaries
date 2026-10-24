@@ -7,7 +7,8 @@ import java.util.stream.Collectors;
 /**
  * 集合工具类
  *
- * <p>提供常用的集合操作方法，增强版的Apache Commons Collections。
+ * <p>提供基于 JDK 集合和流的操作，不依赖 Apache Commons Collections。
+ * 空输入通常返回不可变空集合，非空结果的可变性依具体方法而定，不保证深复制或线程安全。
  *
  * <p>使用示例：
  * <pre>
@@ -44,6 +45,7 @@ import java.util.stream.Collectors;
  */
 public final class CollectionUtil {
 
+    /** 禁止实例化集合工具类。 */
     private CollectionUtil() {
         // 私有构造函数，防止实例化
     }
@@ -176,7 +178,7 @@ public final class CollectionUtil {
     // ==================== 转Map ====================
 
     /**
-     * 转Map（指定键）
+     * 转Map（指定键），重复键保留流中先遇到的元素。
      *
      * @param collection 集合
      * @param keyMapper 键提取函数
@@ -193,7 +195,7 @@ public final class CollectionUtil {
     }
 
     /**
-     * 转Map（指定键和值）
+     * 转Map（指定键和值），重复键保留流中先遇到的值。
      *
      * @param collection 集合
      * @param keyMapper 键提取函数
@@ -276,7 +278,7 @@ public final class CollectionUtil {
      * @param collection1 集合1
      * @param collection2 集合2
      * @param <T> 元素类型
-     * @return 并集
+     * @return 去重后的并集，不保证迭代顺序
      */
     public static <T> List<T> union(Collection<T> collection1, Collection<T> collection2) {
         Set<T> set = new HashSet<>();

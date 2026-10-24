@@ -37,6 +37,7 @@ import java.util.stream.Collectors;
  */
 public final class StringUtil {
 
+    /** 禁止实例化字符串工具类。 */
     private StringUtil() {
         // 私有构造函数，防止实例化
     }
@@ -233,7 +234,7 @@ public final class StringUtil {
     // ==================== 字符串分割 ====================
 
     /**
-     * 字符串分割
+     * 按字面分隔符切分，去除片段首尾空白并丢弃空片段。
      *
      * @param str 字符串
      * @param separator 分隔符
@@ -255,8 +256,9 @@ public final class StringUtil {
      * 截取字符串（左边）
      *
      * @param str 字符串
-     * @param length 长度
+     * @param length 非负截取长度
      * @return 截取后的字符串
+     * @throws IndexOutOfBoundsException 非空输入的截取长度为负数
      */
     public static String left(String str, int length) {
         if (isEmpty(str)) {
@@ -272,8 +274,9 @@ public final class StringUtil {
      * 截取字符串（右边）
      *
      * @param str 字符串
-     * @param length 长度
+     * @param length 非负截取长度
      * @return 截取后的字符串
+     * @throws IndexOutOfBoundsException 非空输入的截取长度为负数
      */
     public static String right(String str, int length) {
         if (isEmpty(str)) {
@@ -289,8 +292,9 @@ public final class StringUtil {
      * 截取字符串（超长部分用...代替）
      *
      * @param str 字符串
-     * @param maxLength 最大长度
+     * @param maxLength 包含省略号的最大长度，需要截断时至少为 3
      * @return 截取后的字符串
+     * @throws IndexOutOfBoundsException 需要截断但最大长度小于 3
      */
     public static String truncate(String str, int maxLength) {
         if (isEmpty(str)) {

@@ -30,6 +30,7 @@ import java.util.Date;
  */
 public final class DateUtil {
 
+    /** 禁止实例化日期工具类。 */
     private DateUtil() {
         // 私有构造函数，防止实例化
     }
@@ -169,6 +170,7 @@ public final class DateUtil {
      *
      * @param dateTimeStr 日期时间字符串
      * @return LocalDateTime
+     * @throws java.time.format.DateTimeParseException 非空文本无法按默认格式解析
      */
     public static LocalDateTime parse(String dateTimeStr) {
         if (dateTimeStr == null || dateTimeStr.isEmpty()) {
@@ -182,6 +184,7 @@ public final class DateUtil {
      *
      * @param dateStr 日期字符串
      * @return LocalDate
+     * @throws java.time.format.DateTimeParseException 非空文本无法按默认格式解析
      */
     public static LocalDate parseDate(String dateStr) {
         if (dateStr == null || dateStr.isEmpty()) {
@@ -196,6 +199,8 @@ public final class DateUtil {
      * @param dateTimeStr 日期时间字符串
      * @param pattern 格式
      * @return LocalDateTime
+     * @throws IllegalArgumentException 格式表达式不合法
+     * @throws java.time.format.DateTimeParseException 非空文本无法按指定格式解析
      */
     public static LocalDateTime parse(String dateTimeStr, String pattern) {
         if (dateTimeStr == null || dateTimeStr.isEmpty()) {

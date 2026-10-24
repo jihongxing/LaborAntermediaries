@@ -6,6 +6,7 @@ import java.util.regex.Pattern;
  * 参数校验工具类
  *
  * <p>用于校验常见的业务参数，如身份证、手机号、邮箱等。
+ * 仅做本地格式或校验位检查，不验证号码归属、证件真实性或实名关系。
  *
  * <p>使用示例：
  * <pre>
@@ -24,6 +25,7 @@ import java.util.regex.Pattern;
  */
 public final class ValidationUtil {
 
+    /** 禁止实例化参数校验工具类。 */
     private ValidationUtil() {
         // 私有构造函数，防止实例化
     }
@@ -115,7 +117,7 @@ public final class ValidationUtil {
     /**
      * 校验身份证号（支持15位和18位）
      *
-     * <p>包含格式校验和校验位校验
+     * <p>15 位仅检查格式，18 位额外检查校验位；不检查出生日期和行政区划真实性。
      *
      * @param idCard 身份证号
      * @return true有效，false无效
@@ -140,7 +142,7 @@ public final class ValidationUtil {
     }
 
     /**
-     * 校验18位身份证的校验位
+     * 校验18位身份证的校验位，调用方须先确认长度及前17位均为数字。
      *
      * @param idCard 身份证号
      * @return true有效，false无效

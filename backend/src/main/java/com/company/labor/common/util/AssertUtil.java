@@ -10,6 +10,7 @@ import java.util.Map;
  * 断言工具类
  *
  * <p>简化参数校验代码，自动抛出BusinessException。
+ * 自定义错误消息会由异常处理器回传客户端，必须使用可公开文本；本类不代替权限或组织隔离校验。
  *
  * <p>使用示例：
  * <pre>
@@ -40,6 +41,7 @@ import java.util.Map;
  */
 public final class AssertUtil {
 
+    /** 禁止实例化断言工具类。 */
     private AssertUtil() {
         // 私有构造函数，防止实例化
     }

@@ -4,12 +4,25 @@
 <module name="Checker">
     <property name="charset" value="UTF-8"/>
     <property name="fileExtensions" value="java"/>
+    <module name="SuppressionSingleFilter">
+        <property name="checks" value="MissingJavadocType|MissingJavadocMethod"/>
+        <property name="files" value="^(?!.*[\\/]src[\\/]main[\\/]java[\\/].*[\\/](foundation|common)[\\/]).*"/>
+    </module>
     <module name="FileTabCharacter"/>
     <module name="LineLength">
         <property name="max" value="150"/>
         <property name="ignorePattern" value="^package.*|^import.*"/>
     </module>
     <module name="TreeWalker">
+        <module name="MissingJavadocType">
+            <property name="scope" value="private"/>
+            <property name="skipAnnotations" value=""/>
+        </module>
+        <module name="MissingJavadocMethod">
+            <property name="scope" value="private"/>
+            <property name="allowedAnnotations" value=""/>
+            <property name="allowMissingPropertyJavadoc" value="false"/>
+        </module>
         <module name="UnusedImports"/>
         <module name="RedundantImport"/>
         <module name="PackageName"/>

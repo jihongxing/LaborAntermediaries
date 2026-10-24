@@ -9,6 +9,8 @@ import java.text.DecimalFormat;
  *
  * <p>所有金额计算必须使用BigDecimal，禁止使用double/float。
  * 本工具类提供了常用的金额计算和格式化方法。
+ * BigDecimal 加减和比较将 null 视为零，乘除默认保留两位并四舍五入；
+ * 字符串重载直接解析数值，不接受 null 或非法数值。新交易金额推荐使用 common.money.Money 显式携带币种。
  *
  * <p>使用示例：
  * <pre>
@@ -24,6 +26,7 @@ import java.text.DecimalFormat;
  */
 public final class MoneyUtil {
 
+    /** 禁止实例化金额工具类。 */
     private MoneyUtil() {
         // 私有构造函数，防止实例化
     }
@@ -39,9 +42,9 @@ public final class MoneyUtil {
     private static final RoundingMode DEFAULT_ROUNDING_MODE = RoundingMode.HALF_UP;
 
     /**
-     * 金额格式化器（带千分位）
+     * 带千分位的显示格式，每次格式化创建独立实例，避免 DecimalFormat 跨线程共享。
      */
-    private static final DecimalFormat MONEY_FORMAT = new DecimalFormat("#,##0.00");
+    private static final String MONEY_PATTERN = "#,##0.00";
 
     /**
      * 加法
@@ -105,7 +108,9 @@ public final class MoneyUtil {
      * @param a 乘数
      * @param b 乘数
      * @return 积
+     * @deprecated 兼容旧代码的两位舍入；新增计价使用 UnitPrice 或 CalculatedAmount，禁止中间值提前舍入
      */
+    @Deprecated
     public static BigDecimal multiply(BigDecimal a, BigDecimal b) {
         if (a == null) {
             a = BigDecimal.ZERO;
@@ -122,7 +127,9 @@ public final class MoneyUtil {
      * @param a 乘数
      * @param b 乘数
      * @return 积
+     * @deprecated 兼容旧代码的两位舍入；新增计价使用 UnitPrice 或 CalculatedAmount
      */
+    @Deprecated
     public static BigDecimal multiply(String a, String b) {
         return multiply(new BigDecimal(a), new BigDecimal(b));
     }
@@ -134,7 +141,9 @@ public final class MoneyUtil {
      * @param b 除数
      * @return 商
      * @throws ArithmeticException 除数为0
+     * @deprecated 兼容旧代码的两位舍入；新增计价使用 CalculatedAmount.divide 并显式传入策略
      */
+    @Deprecated
     public static BigDecimal divide(BigDecimal a, BigDecimal b) {
         if (a == null) {
             a = BigDecimal.ZERO;
@@ -151,7 +160,11 @@ public final class MoneyUtil {
      * @param a 被除数
      * @param b 除数
      * @return 商
+     * @throws NumberFormatException 参数不是合法十进制数值
+     * @throws ArithmeticException 除数为零
+     * @deprecated 兼容旧代码的两位舍入；新增计价使用 CalculatedAmount.divide 并显式传入策略
      */
+    @Deprecated
     public static BigDecimal divide(String a, String b) {
         return divide(new BigDecimal(a), new BigDecimal(b));
     }
@@ -168,7 +181,7 @@ public final class MoneyUtil {
         if (amount == null) {
             return "¥0.00";
         }
-        return "¥" + MONEY_FORMAT.format(amount);
+        return "¥" + new DecimalFormat(MONEY_PATTERN).format(amount);
     }
 
     /**
@@ -183,7 +196,7 @@ public final class MoneyUtil {
         if (amount == null) {
             return "0.00";
         }
-        return MONEY_FORMAT.format(amount);
+        return new DecimalFormat(MONEY_PATTERN).format(amount);
     }
 
     /**
@@ -192,13 +205,14 @@ public final class MoneyUtil {
      * <p>示例：12.34元 -> 1234分
      *
      * @param yuan 元
-     * @return 分
+     * @return 分；为兼容旧调用，null 仍返回零，新金额契约不接受 null
+     * @throws ArithmeticException 存在分以下非零小数或结果超出 long 范围
      */
     public static Long yuanToFen(BigDecimal yuan) {
         if (yuan == null) {
             return 0L;
         }
-        return yuan.multiply(new BigDecimal("100")).longValue();
+        return yuan.multiply(new BigDecimal("100")).longValueExact();
     }
 
     /**
@@ -268,7 +282,7 @@ public final class MoneyUtil {
      *
      * @param a 金额a
      * @param b 金额b
-     * @return 最大值
+     * @return 按 null 视为零比较后的原始参数，可能为 null
      */
     public static BigDecimal max(BigDecimal a, BigDecimal b) {
         return compare(a, b) >= 0 ? a : b;
@@ -279,7 +293,7 @@ public final class MoneyUtil {
      *
      * @param a 金额a
      * @param b 金额b
-     * @return 最小值
+     * @return 按 null 视为零比较后的原始参数，可能为 null
      */
     public static BigDecimal min(BigDecimal a, BigDecimal b) {
         return compare(a, b) <= 0 ? a : b;

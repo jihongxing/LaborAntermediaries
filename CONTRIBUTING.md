@@ -177,6 +177,8 @@ git push origin feature/your-feature-name
 3. ✅ Mapper层只做数据库操作
 4. ✅ 金额必须用`BigDecimal`，不用`double`
 5. ✅ 所有业务表必须有`tenant_id`字段
+6. ✅ 新增或修改代码必须补齐中文注释；Java 类型、手写方法与构造器、字段及关键逻辑的具体要求以
+   [注释规范](CLAUDE.md#注释规范强制) 和 [后端执行规则](backend/AGENTS.md) 为准，基础设施代码不例外。
 
 **示例**：
 ```java

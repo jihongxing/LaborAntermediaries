@@ -5,6 +5,8 @@ package com.company.labor.common.util;
  *
  * <p>用于脱敏敏感信息，如身份证、手机号、银行卡、姓名等。
  * 日志输出、API响应中的敏感信息必须脱敏。
+ * 本类仅进行字符遮盖，不加密、不匿名化，也不校验内容真实性；
+ * 不满足方法长度条件的输入可能原样返回，调用方仍须检查输出是否适合公开。
  *
  * <p>使用示例：
  * <pre>
@@ -23,6 +25,7 @@ package com.company.labor.common.util;
  */
 public final class DesensitizeUtil {
 
+    /** 禁止实例化脱敏工具类。 */
     private DesensitizeUtil() {
         // 私有构造函数，防止实例化
     }

@@ -10,6 +10,7 @@ import com.company.labor.common.constant.ErrorCode;
  */
 public class ForbiddenException extends BusinessException {
 
+    /** 权限异常的序列化版本。 */
     private static final long serialVersionUID = 1L;
 
     /**
