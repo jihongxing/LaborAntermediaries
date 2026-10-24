@@ -12,6 +12,103 @@
 - `pom.xml`、`checkstyle.xml`、`compose.yml` 分别维护依赖与验证、代码风格、本地依赖环境；变更应同步说明和测试。
 - 必须保持组织隔离、权限校验、审计和错误契约；基础能力与业务规则分离，业务接入遵守下文准入要求。
 
+### 目录规划原则
+
+本节是新增代码和文件的放置指南，不是要求立即迁移现有代码。保持单 Maven 工程、模块化单体；只在真实需求出现时新增目录，不预建空业务模块、空分层或 Maven 子模块。业务目录的规划不代表相关需求已经获准实现，新增业务仍须满足第 3 节接入约束。
+
+Java 包根统一为 `com.company.labor`，**先按能力或业务模块归类，再在模块内部按需分层**。禁止在包根新增汇集全系统代码的 `controller`、`service`、`mapper`、`entity` 或 `dto` 包。
+
+### 目标目录与职责
+
+以下为放置模板，带“按需新增”的目录目前不要求存在；`<module>`、`<capability>` 是占位符，实际使用明确的小写英文名称。
+
+```text
+backend/
+├── pom.xml / checkstyle.xml / compose.yml
+├── src/
+│   ├── main/
+│   │   ├── java/com/company/labor/
+│   │   │   ├── LaborApplication.java
+│   │   │   ├── common/                    通用契约与无业务归属的纯工具
+│   │   │   ├── foundation/                非业务基础能力
+│   │   │   │   ├── audit/                 操作审计
+│   │   │   │   ├── context/               执行身份与组织上下文
+│   │   │   │   ├── crypto/                加密与密钥使用
+│   │   │   │   ├── persistence/           通用持久化支持
+│   │   │   │   ├── reliability/           幂等与可靠执行
+│   │   │   │   ├── security/              认证、权限与令牌撤销
+│   │   │   │   ├── storage/               私有文件存取
+│   │   │   │   ├── tasks/                 可靠任务调度
+│   │   │   │   └── web/                   Web 协议与序列化支持
+│   │   │   └── modules/                   业务模块，按需新增
+│   │   │       └── <module>/              一个明确的业务职责
+│   │   │           ├── api/               供其他模块调用的接口与契约，按需新增
+│   │   │           ├── controller/        HTTP 入口及请求、响应模型
+│   │   │           ├── application/       用例编排、事务与权限协调
+│   │   │           ├── domain/            业务规则、领域模型
+│   │   │           └── persistence/       Mapper、数据库实体与持久化实现
+│   │   └── resources/
+│   │       ├── application*.yml           应用配置
+│   │       ├── logback-spring.xml         日志配置
+│   │       ├── db/migration/              全工程统一编号的 Flyway 迁移
+│   │       └── mapper/<module>/           业务 Mapper XML，按需新增
+│   ├── test/
+│   │   ├── java/com/company/labor/         按被测代码的包结构组织
+│   │   └── resources/                     测试专用配置和合成数据，按需新增
+│   └── README.md
+├── logs/                                 本地日志，不存放源码或唯一资料
+└── target/                               自动生成的构建产物
+```
+
+| 位置 | 应当放置 | 不应放置 |
+|---|---|---|
+| Java 包根 | 应用启动入口 | 业务类、全局 Service 或 Mapper 集合 |
+| `common` | `Result`、`PageResult`、通用错误契约、字符串或集合等纯工具 | 某业务专属规则、数据库访问、外部系统调用 |
+| `foundation/<capability>` | 可复用且不承载业务政策的技术能力，以及其专属配置、过滤器、任务基础设施 | 招聘条件、结算规则、业务对象授权决策 |
+| `modules/<module>` | 单一业务模块的用例、规则、数据访问及模块专属配置、任务处理器 | 其他模块的内部实现、跨系统杂项 |
+| `resources` | 配置、迁移、必要的类路径资源 | Java 源码、真实密钥、运行时上传文件、生产数据 |
+| `test` | 对应模块的测试、测试辅助类和合成数据 | 被生产代码依赖的实现 |
+
+现有 `common/config`、`common/filter`、`common/context`、`common/exception` 中仍有框架集成和上下文桥接代码，部分依赖 `foundation`；它们属于现状兼容，不代表新增基础能力也应放入 `common`。本次不搬迁这些类，也不声称现有依赖已经单向化。后续触及其职责调整时，再单独评估迁移和兼容测试。
+
+### 新增文件如何决定位置
+
+1. **先找职责归属**：只服务某个业务的代码放 `modules/<module>`；无业务规则但需要框架、数据库或外部资源的基础能力放 `foundation/<capability>`；没有业务归属的通用契约或纯工具才考虑 `common`。不要仅因为“以后可能复用”就上提为公共代码。
+2. **再找已有子包**：同一职责的代码优先放在已有包中；模块专属 DTO、异常、枚举、配置和任务处理器跟随模块，不集中堆进 `common` 或全局 `dto`、`exception`、`config` 包。
+3. **按实际职责新增子包**：业务模块内部按需使用目录模板中的分层；请求和响应模型增多时可拆为 `controller/request`、`controller/response`，不要为了凑层级创建只有透传职责的类或接口。
+4. **出现新业务职责才新增模块**：新功能若拥有独立规则、用例和数据归属，且无法合理归入已有模块，应先明确职责和对外接口，再新增 `modules/<module>`；不要按一张表或一个接口机械建模块。
+5. **同步配套文件**：新增测试放到相应测试包；需要手写 SQL 时，XML 放 `resources/mapper/<module>/`，其 `namespace` 对应 Mapper 全限定名；数据库变更始终新增到统一的 `db/migration/`，不按业务拆出独立版本序列。
+
+业务模块内部的职责约定：
+
+- `controller` 只负责协议转换、参数校验和调用用例，不直接调用 Mapper 或编写业务规则；请求和响应模型不直接使用数据库实体。
+- `application` 负责用例编排、事务和调用基础能力；`domain` 聚焦业务规则，不依赖 Controller、HTTP 请求对象或具体持久化实现。
+- `persistence` 封装 Mapper、数据库实体和查询实现；确有隔离需要时，领域所需的持久化接口放 `domain`，实现放 `persistence`，不要求每个类都配一个接口。
+- `api` 仅在发生真实跨模块调用时建立，包含稳定调用接口和必要契约；实现留在模块内部，不通过这个包暴露 Mapper 或数据库实体。
+
+### 依赖与拆包规则
+
+- 新增代码的依赖方向为 `modules → foundation / common`、`foundation → common`；不得新增 `common → foundation / modules` 或 `foundation → modules` 的直接实现依赖。基础能力需要业务策略时，由基础能力定义小接口，业务提供实现，例如 `FileAccessPolicy`、`TaskHandler`。
+- 跨业务模块只调用对方明确公开的 `api` 契约，不直接引用对方的 Controller、Mapper、数据库实体或内部实现；禁止跨模块直接操作对方拥有的数据表，禁止循环依赖。
+- 保持小接口、内聚实现；代码只被一个模块使用时留在模块内部。确有多个调用方共享相同语义时，再评估提取公共能力，不因少量代码相似就抽出公共模块。
+- 当一个包包含多种独立职责、修改通常只涉及其中一组类，或名称越来越依赖 `Manager`、`Helper`、`Misc` 才能区分时，应评估按职责拆包。文件数量只作为评审信号，不设机械的文件数上限，也不把一次拆包变成全量重构。
+- 新增业务模块、基础能力包或改变目录职责时，同步更新本节；普通文件新增若遵循已有职责，不要求逐个登记。复杂模块再增加模块级 README，说明职责、公开接口和依赖限制，本节作为总入口。
+
+### 放置示例
+
+以下业务路径仅演示获批需求的归属，不代表本次创建目录或实现业务：
+
+| 新增内容 | 放置位置 |
+|---|---|
+| 私有文件存储的新实现 | `src/main/java/com/company/labor/foundation/storage/` |
+| 通用、无副作用的字符串处理函数 | 优先评估现有 `common/util/StringUtil.java`，不要重复新建工具类 |
+| 招聘查询接口与请求模型 | `src/main/java/com/company/labor/modules/recruitment/controller/` 及其按需新增的 `request/` |
+| 招聘查询用例与数据库 Mapper | 分别放 `modules/recruitment/application/`、`modules/recruitment/persistence/` |
+| 招聘查询的 Mapper XML | `src/main/resources/mapper/recruitment/` |
+| 招聘模块的可靠任务处理器 | `src/main/java/com/company/labor/modules/recruitment/application/`，任务调度底座仍在 `foundation/tasks/` |
+| 招聘用例的单元测试 | `src/test/java/com/company/labor/modules/recruitment/application/` |
+| 新增业务表迁移 | `src/main/resources/db/migration/V<下一个未占用版本>__<变更说明>.sql`，保持全工程版本唯一 |
+
 ## 禁止事项
 
 - 禁止把招聘、奖励、履约或支付规则直接塞入通用底座，或把制度草案实现为已批准的付款规则。
