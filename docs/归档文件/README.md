@@ -26,6 +26,7 @@
 
 | 文件名 | 归档日期 | 归档原因 | 替代文档 |
 |--------|---------|---------|---------|
+| [20261024-产品战略路线与可选增值渠道-v0.1.md](20261024-产品战略路线与可选增值渠道-v0.1.md) | 2026-10-24 | 对比后升级整体战略，保留旧版金融演进规划供追溯 | [产品战略路线与可选增值渠道 v0.2](../02-开发阶段/产品设计/05-战略与实施/产品战略路线与可选增值渠道-v0.2.md) |
 | requirements-draft-v0.1.md | 2026-10-17 | 已更新到v0.2 | [requirements-draft-v0.2.md](../01-售前阶段/需求分析/requirements-draft-v0.2.md) |
 | project-quotation.md | 2026-10-17 | 单价2490元，已废弃 | [project-quotation-modular-v2.md](../01-售前阶段/报价方案/project-quotation-modular-v2.md) |
 | project-quotation-modular.md | 2026-10-17 | 单价2490元，已废弃 | [project-quotation-modular-v2.md](../01-售前阶段/报价方案/project-quotation-modular-v2.md) |
