@@ -6,7 +6,7 @@ import vm from "node:vm";
 const deliveryPackageUrl = new URL("../../01-售前阶段/客户演示交付包/", import.meta.url);
 const pageUrl = new URL("用工方收益与合作价值模拟器-v1.html", deliveryPackageUrl);
 const html = readFileSync(pageUrl, "utf8");
-const defaults = { workers: 1000, effectiveDays: 26, fee: 2, months: 12 };
+const defaults = { workers: 1000, effectiveDays: 26, fee: 1, months: 12 };
 
 function loadPage() {
   const elements = new Map([...html.matchAll(/id="([^"]+)"/g)].map((match) => [match[1], {
@@ -40,29 +40,32 @@ test("默认项目计算实际人天和月度、年度分账", () => {
   const result = calculate();
   assert.equal(result.monthlyPersonDays, 26000);
   assert.equal(result.annualPersonDays, 312000);
-  assert.equal(result.buyerPerDayCents, 90);
-  assert.equal(result.monthlyFeeCents, 5200000);
-  assert.equal(result.monthlyBuyerCents, 2340000);
-  assert.equal(result.monthlyPlatformCents, 2860000);
-  assert.equal(result.annualBuyerCents, 28080000);
-  assert.equal(result.annualFeeCents, 62400000);
-  assert.equal(result.annualPlatformCents, 34320000);
-  assert.equal(elements.get("monthlyBenefit").textContent, "¥23,400");
-  assert.equal(elements.get("annualBenefit").textContent, "¥280,800");
-  assert.match(elements.get("ruleText").textContent, /用工方分享60%，平台留存其余40%/);
-  assert.match(elements.get("formulaText").textContent, /×60%＝¥0.9/);
+  assert.equal(result.buyerPerDayCents, 49);
+  assert.equal(result.monthlyFeeCents, 2600000);
+  assert.equal(result.monthlyBuyerCents, 1274000);
+  assert.equal(result.monthlyPlatformCents, 1326000);
+  assert.equal(result.annualBuyerCents, 15288000);
+  assert.equal(result.annualFeeCents, 31200000);
+  assert.equal(result.annualPlatformCents, 15912000);
+  assert.equal(elements.get("fee").value, "1");
+  assert.equal(elements.get("monthlyBenefit").textContent, "¥12,740");
+  assert.equal(elements.get("annualBenefit").textContent, "¥152,880");
+  assert.match(elements.get("ruleText").textContent, /前¥0.3 \/ 人天归平台；超出部分按平台\/用工方3\/7分配（用工方分享70%，平台留存30%）/);
+  assert.match(elements.get("formulaText").textContent, /×70%＝¥0.49/);
 });
 
-test("全部十档符合基准归平台、超出部分平台四成用工方六成的规则且金额守恒", () => {
+test("全部六档符合0.3元平台基准、超出部分平台三成用工方七成的规则且金额守恒", () => {
   const { calculate, elements } = loadPage();
-  assert.equal(elements.get("fee").options.length, 10);
+  assert.equal(elements.get("fee").options.length, 6);
   assert.equal(elements.get("workers").options.length, 10);
-  for (let index = 1; index <= 10; index += 1) {
-    const result = calculate({ ...defaults, fee: index / 2 });
-    assert.equal(result.buyerPerDayCents, (index - 1) * 30);
+  for (let index = 1; index <= 6; index += 1) {
+    const fee = index / 2;
+    const result = calculate({ ...defaults, fee });
+    assert.equal(elements.get("fee").options[index - 1].value, String(fee));
+    assert.equal(result.buyerPerDayCents, Math.round((fee * 100 - 30) * 0.7));
     assert.equal(result.monthlyBuyerCents + result.monthlyPlatformCents, result.monthlyFeeCents);
     assert.equal(result.annualBuyerCents + result.annualPlatformCents, result.annualFeeCents);
-    assert.equal(result.tiers.length, 10);
+    assert.equal(result.tiers.length, 6);
     assert.equal(result.tiers[index - 1].monthlyBuyerCents, result.monthlyBuyerCents);
   }
 });
@@ -71,27 +74,27 @@ test("对客模拟器不展示非默认分成方案或内部商业规则文档�
   const supplier = readFileSync(new URL("劳务派遣毛利与资金回报模拟器-v1.html", deliveryPackageUrl), "utf8");
   const { elements } = loadPage();
   for (const source of [html, supplier, elements.get("ruleText").textContent]) {
-    assert.doesNotMatch(source, /30%|70%|20%|80%|其他批准档位|其他已批准档|非默认|href="商业模式与收费标准/);
+    assert.doesNotMatch(source, /40%|60%|20%|80%|其他批准档位|其他已批准档|非默认|href="商业模式与收费标准/);
   }
-  assert.match(elements.get("ruleText").textContent, /用工方分享60%/);
+  assert.match(elements.get("ruleText").textContent, /平台\/用工方3\/7分配（用工方分享70%，平台留存30%）/);
 });
 
 test("人数、半日与履约月份独立驱动所有金额", () => {
   const { calculate } = loadPage();
   const result = calculate({ workers: 100, effectiveDays: 25.5, fee: 1, months: 6 });
   assert.equal(result.monthlyPersonDays, 2550);
-  assert.equal(result.monthlyBuyerCents, 76500);
-  assert.equal(result.annualBuyerCents, 459000);
+  assert.equal(result.monthlyBuyerCents, 124950);
+  assert.equal(result.annualBuyerCents, 749700);
   for (const tier of result.tiers) {
     assert.ok(Number.isSafeInteger(tier.monthlyBuyerCents));
     assert.equal(tier.annualBuyerCents, tier.monthlyBuyerCents * 6);
   }
 });
 
-test("无履约或基准费率不虚构用工方收益", () => {
+test("无履约不虚构收益，最低档按超出平台基准部分计算分享", () => {
   const { calculate } = loadPage();
   assert.equal(calculate({ ...defaults, effectiveDays: 0 }).annualFeeCents, 0);
-  assert.equal(calculate({ ...defaults, fee: 0.5 }).annualBuyerCents, 0);
+  assert.equal(calculate({ ...defaults, fee: 0.5 }).annualBuyerCents, 4368000);
 });
 
 test("拒绝缺失、非数字、越界和非法档位", () => {
@@ -99,7 +102,7 @@ test("拒绝缺失、非数字、越界和非法档位", () => {
   for (const [key, invalidValues] of Object.entries({
     workers: [0, 150, 1100, null, "", undefined, Infinity],
     effectiveDays: [-1, 31.5, 25.1, "abc", NaN],
-    fee: [0, 0.75, 5.5],
+    fee: [0, 0.3, 0.75, 3.5, 5.5],
     months: [0, 13, 1.5],
   })) {
     for (const value of invalidValues) assert.throws(() => calculate({ ...defaults, [key]: value }));
@@ -110,7 +113,7 @@ test("拒绝缺失、非数字、越界和非法档位", () => {
 test("每个输入均触发实时重算并更新档位表", () => {
   const { elements, calculate } = loadPage();
   const input = { ...defaults };
-  for (const [key, value] of Object.entries({ workers: 500, effectiveDays: 20, fee: 5, months: 6 })) {
+  for (const [key, value] of Object.entries({ workers: 500, effectiveDays: 20, fee: 3, months: 6 })) {
     input[key] = value;
     elements.get(key).value = String(value);
     elements.get(key).handlers.input();
@@ -132,7 +135,7 @@ test("无效输入清除旧结果，重置恢复默认，打印行为可用", ()
   assert.match(elements.get("errorMessage").textContent, /完整填写/);
   elements.get("resetButton").handlers.click();
   assert.equal(elements.get("results").hidden, false);
-  assert.equal(elements.get("annualBenefit").textContent, "¥280,800");
+  assert.equal(elements.get("annualBenefit").textContent, "¥152,880");
   assert.equal(elements.get("errorMessage").textContent, "");
   assert.match(elements.get("feedback").textContent, /已恢复/);
   elements.get("printButton").handlers.click();
@@ -185,7 +188,8 @@ test("重写演示页以痛点组织叙事，锚点有效且不暴露内部方�
   for (let index = 1; index < order.length; index += 1) {
     assert.ok(presentation.indexOf(`id="${order[index - 1]}"`) < presentation.indexOf(`id="${order[index]}"`));
   }
-  assert.doesNotMatch(presentation, /30%|70%|20%|80%|3\/7|2\/8|href="商业模式与收费标准|<iframe\b|https?:\/\//);
+  assert.doesNotMatch(presentation, /40%|60%|20%|80%|2\/8|href="商业模式与收费标准|<iframe\b|https?:\/\//);
+  assert.match(presentation, /0\.5–3元\/有效履约人天，每0\.5元一档；默认1元。前0\.3元归平台，超出部分按平台\/用工方3\/7分配/);
   assert.match(presentation, /具体功能与实施范围，以合作前确认为准/);
   assert.match(presentation, /没到岗的人不计费/);
   assert.match(presentation, /用同一个项目，分别看看用工方能分享多少/);

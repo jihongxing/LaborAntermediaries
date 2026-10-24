@@ -33,7 +33,7 @@
   <footer>金额为人民币，最多显示两位小数。分享收益归属于签约用工方组织，实际支付以合同约定及结算条件为准，不代表个人奖励、自动到账或利润保证。本页可离线使用。</footer>
 </main>
 <script>
-  const BUYER_RULES = Object.freeze({ baseFeeCents: 50, buyerSharePercent: 60, feeStepCents: 50, maximumFeeCents: 300 });
+  const BUYER_RULES = Object.freeze({ baseFeeCents: 30, buyerSharePercent: 70, feeStepCents: 50, maximumFeeCents: 300 });
   const BUYER_DEFAULTS = Object.freeze({ workers: 1000, effectiveDays: 26, fee: 1, months: 12 });
   const WORKER_TIERS = Array.from({ length: 10 }, (_, index) => (index + 1) * 100);
   const FEE_TIERS = Array.from({ length: BUYER_RULES.maximumFeeCents / BUYER_RULES.feeStepCents }, (_, index) => (index + 1) * BUYER_RULES.feeStepCents / 100);
@@ -69,7 +69,7 @@
   addOptions("workers", WORKER_TIERS, " 人");
   addOptions("fee", FEE_TIERS, " 元/人天");
   addOptions("months", Array.from({ length: 12 }, (_, index) => index + 1), " 个月");
-  document.getElementById("ruleText").textContent = `本页测算口径：管理费前${money(BUYER_RULES.baseFeeCents)} / 人天归平台；超出部分用工方分享${BUYER_RULES.buyerSharePercent}%，平台留存其余${100 - BUYER_RULES.buyerSharePercent}%。费率范围${money(BUYER_RULES.feeStepCents)}–${money(BUYER_RULES.maximumFeeCents)}，每${money(BUYER_RULES.feeStepCents)}一档。按经核验的实际有效履约人天计算，具体合作以合同约定为准。`;
+  document.getElementById("ruleText").textContent = `本页测算口径：前${money(BUYER_RULES.baseFeeCents)} / 人天归平台；超出部分按平台/用工方3/7分配（用工方分享${BUYER_RULES.buyerSharePercent}%，平台留存${100 - BUYER_RULES.buyerSharePercent}%）。费率范围${money(BUYER_RULES.feeStepCents)}–${money(BUYER_RULES.maximumFeeCents)}，每${money(BUYER_RULES.feeStepCents)}一档；默认${money(BUYER_DEFAULTS.fee * 100)} / 人天。按经核验的实际有效履约人天计算，具体合作以合同约定为准。`;
   function writeRows(id, rows) {
     document.getElementById(id).innerHTML = rows.map(([label, ...values]) => `<tr><th scope="row">${label}</th>${values.map((value) => `<td>${value}</td>`).join("")}</tr>`).join("");
   }

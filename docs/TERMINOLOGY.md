@@ -1,648 +1,416 @@
 # 项目术语表（Terminology）
 
 **项目名称**：劳务供应链交易平台
-**文档版本**：v1.0  
-**最后更新**：2026年10月20日
-**维护人**：技术负责人
-
-> 当前业务术语以自主推进需求基线 v0.4 和劳务供应链交易平台 PRD v0.1 为准；本表中的历史术语只作为兼容和检索参考，不得覆盖当前产品定位、收费、资金及角色边界。
-
----
-
-## 📋 文档说明
-
-本文档是项目的**全局统一术语表**，定义了所有业务概念、技术术语、数据字段的标准命名和含义。
-
-**使用规则**：
-1. ✅ 所有文档、代码、接口必须使用本表定义的术语
-2. ✅ 出现新术语时，必须先更新本表，再使用
-3. ✅ 禁止使用同义词或自创术语
-4. ✅ 术语冲突时，以本表为准
-
-**更新流程**：
-1. 提出新术语需求
-2. 技术负责人审查
-3. 更新本文档
-4. 通知团队成员
-
----
-
-## 🎯 目录
-
-1. [业务术语](#业务术语)
-2. [技术术语](#技术术语)
-3. [数据库术语](#数据库术语)
-4. [API术语](#api术语)
-5. [前端术语](#前端术语)
-6. [状态枚举值](#状态枚举值)
-7. [禁止使用的术语](#禁止使用的术语)
-
----
-
-## 📊 一、业务术语
-
-### 1.1 核心业务概念
-
-| 中文 | 英文术语 | 缩写 | 说明 | 示例 |
-|------|---------|------|------|------|
-| **租户** | tenant | - | 平台内具有独立数据与权限边界的组织空间；具体组织类型与平台运营空间关系按系统架构定义 | 租户ID、租户名称 |
-| **工人** | worker | worker | 实际参与岗位或项目履约的个人；劳动关系、合同主体与报酬责任依真实安排确定 | 工人编号、工人姓名 |
-| **项目** | project | proj | 中标后承载履约方案、供给、人员、考勤、计费与结算记录的业务单元 | 项目名称、项目编号 |
-| **排班** | schedule / shift assignment | - | 经授权项目人员发布并版本化的人员、岗位、服务日期和计划班次安排；计划时间不等于实际出勤 | 项目排班、班次安排 |
-| **平台原始打卡事件** | platform clock event | - | 工人经平台小程序提交的上班/下班打卡原始事实；追加保存并关联工人、项目、履约关系、班次和平台接收时间 | 上班打卡事件、下班打卡事件 |
-| **计算工时** | calculated work hours | - | 平台按排班版本、打卡/已批准补正事件及适用规则计算的班次工时，尚不必然代表最终确认或计费结果 | 班次计算工时 |
-| **确认工时** | confirmed work hours | - | 经规定主体复核确认并绑定规则版本的工时快照；更正须以调整记录引用原快照 | 月度确认工时 |
-| **外部考勤记录** | external attendance record | - | 来自用工方/工厂接口、文件或其他授权来源的考勤数据，作为独立来源用于差异比对，不覆盖平台原始打卡 | 工厂考勤导入 |
-| **招聘渠道** | recruiting channel | - | 经劳务公司授权、协助其获取候选人或人员供给的合作渠道；不自动成为履约供应商 | 渠道来源、渠道合作费用 |
-| **用工单位** | work unit / employer | - | 发布真实需求、选择供应商并按约确认履约结果的依法设立主体 | 用工单位名称 |
-| **政策** | policy | - | 工资计算规则、返费计算规则 | 工资政策、返费政策 |
-| **管理员** | admin / administrator | - | 系统管理员 | 系统管理员、租户管理员 |
-| **操作员** | operator | - | 系统操作人员 | 操作员工号、操作员姓名 |
-| **用工方** | employer / work unit | - | 在平台发布用工需求、选择供应商并参与履约确认的组织角色 | 用工方需求 |
-| **劳务供应商** | labor supplier | - | 通过平台准入审核并针对用工需求应标、按实际合同组织相应履约的合规劳务公司 | 中标供应商、供应商配额 |
-| **交易网络** | transaction network | - | 用工单位与合规劳务供应商围绕需求、应标、履约、核验及结算形成的多边交易关系；不是单家组织的内部管理软件 | 供需网络、交易复购 |
-| **交易基础设施** | transaction infrastructure | - | 平台为交易标准化、供应商选择、履约记录核验、计费、对账及结算状态管理提供的共同规则和产品能力 | 需求标准、有效计费记录 |
-| **用工需求** | labor demand | - | 描述服务范围、岗位/标项、地点、数量、目标指标、期限、报价与结算条件的结构化需求 | 需求编号、目标指标 |
-| **应标** | bid | - | 劳务公司针对用工需求提交的结构化承诺、履约方案、供给能力、报价及偏离说明 | 应标方案、承诺值 |
-| **中标快照** | award snapshot | - | 中标时锁定的需求与应标版本、配额、承诺、价格、计量、账期和责任条件；平台费规则仅在适用合同已确定时关联 | 中标条件、配额 |
-| **第三方资金账户** | third-party payment account | - | 仅在实际合同、授权、机构能力和适用要求支持时采用的资金通道；不是平台默认账户安排 | 机构账户、流水 |
-| **资金分配** | fund allocation | - | 按具体合同、授权和通道规则执行的资金支付或分配，不预设所有项目采用固定顺序 | 分配指令、机构回执 |
-| **平台管理费/平台服务费** | platform management/service fee | - | 平台为用工方提供履约管理与监督服务，费用由履约方承担、用工方原则上不付；价格和审批状态见[商业模式与收费标准](02-开发阶段/产品设计/商业模式与收费标准-v0.1.md) | 履约方平台服务费账单 |
-| **需求线索解锁费** | demand lead unlock fee | - | 100 元/条授权有效线索/次解锁价格及前置条件已批准；收费结算暂缓，详见[商业模式与收费标准](02-开发阶段/产品设计/商业模式与收费标准-v0.1.md) | 线索解锁订单 |
-| **有效履约人天** | verified billable worker-day | - | 按项目事先确认的计量口径、履约证据和合同条件核验后可计入平台服务费计算的履约量；争议量单独标记 | 有效计费明细 |
-| **供应商业务结算价** | supplier service price | - | 用工单位与中标劳务公司依各自合同约定的服务单价或结算条件；不是平台服务费 | 中标单价、结算账单 |
-| **管理费** | management fee | - | 单独使用时仍有歧义；如指平台管理费，按[商业模式与收费标准](02-开发阶段/产品设计/商业模式与收费标准-v0.1.md)解释，基线为履约方承担、用工方原则上不付；如指供应商业务结算价中的管理成分，应标明所属结算项目和责任主体 | 平台管理费账单、供应商结算明细 |
-| **返费保障安排** | rebate protection arrangement | - | 可能采用的返费风险保障方式；是否启用、资金形态、责任及规则需单独批准，不表示平台默认承担赔付 | 保障规则、授权记录 |
-
-### 1.2 工资相关
-
-| 中文 | 英文术语 | 缩写 | 说明 | 示例 |
-|------|---------|------|------|------|
-| **工资** | salary | - | 员工的劳动报酬 | 月工资、工资单 |
-| **薪资** | salary | - | 同"工资" | 薪资管理 |
-| **底薪** | base_salary / basic_salary | - | 固定工资部分 | 底薪2000元 |
-| **应发工资** | gross_salary | - | 扣款前的工资总额 | 应发5500元 |
-| **实发工资** | net_salary | - | 实际发放的工资 | 实发5000元 |
-| **时薪** | hourly_rate | - | 每小时工资 | 时薪15元/小时 |
-| **日薪** | daily_rate | - | 每日工资 | 日薪120元/天 |
-| **计件工资** | piece_rate_salary | - | 按件计算的工资 | 计件工资 |
-| **加班费** | overtime_pay | - | 加班产生的工资 | 加班费500元 |
-| **工时** | work_hour / working_hour | - | 工作时长（小时） | 工时200小时/月 |
-| **正常工时** | normal_hour | - | 正常上班时长 | 正常工时160小时 |
-| **加班工时** | overtime_hour | - | 加班时长 | 加班工时40小时 |
-| **扣款** | deduction | - | 从工资中扣除的金额 | 扣款300元 |
-| **罚款** | penalty / fine | - | 违规产生的扣款 | 罚款50元 |
-| **补贴** | allowance / subsidy | - | 额外的补助 | 交通补贴 |
-
-### 1.3 考勤相关
-
-| 中文 | 英文术语 | 缩写 | 说明 | 示例 |
-|------|---------|------|------|------|
-| **考勤** | attendance | att | 由排班、平台原始打卡及其他授权来源构成的出勤记录；须区分来源和确认状态 | 平台考勤、外部考勤 |
-| **打卡** | clock_in / clock_out | - | 工人对本人有效班次提交的上班/下班事件；不自动等于完整工时或有效计费人天 | 上班打卡、下班打卡 |
-| **漏卡补正** | clock correction | - | 针对缺失或错误打卡发起并经授权处理的更正流程；保留原事件/缺失状态、申请理由、证据、处理结论和审计记录 | 下班卡补正 |
-| **考勤差异** | attendance discrepancy | - | 平台计算结果与外部考勤或人工核对结果之间待处理的差别；任一来源不得静默覆盖另一来源 | 工时差异待复核 |
-| **班次工时** | shift work hours | - | 关联特定人员、项目、班次与服务日期的计算或确认工时明细 | 当日班次工时 |
-| **出勤** | present / attendance | - | 正常上班 | 出勤天数 |
-| **缺勤** | absent / absence | - | 未到岗 | 缺勤天数 |
-| **迟到** | late / tardy | - | 晚于规定时间到岗 | 迟到30分钟 |
-| **早退** | early_leave | - | 早于规定时间离岗 | 早退1小时 |
-| **请假** | leave | - | 申请休假 | 请假3天 |
-| **病假** | sick_leave | - | 因病请假 | 病假2天 |
-| **事假** | personal_leave | - | 因私事请假 | 事假1天 |
-| **年假** | annual_leave | - | 带薪年假 | 年假5天 |
-| **旷工** | absent_without_leave | AWOL | 无故缺勤 | 旷工1天 |
-| **调休** | compensatory_leave | - | 加班后的补休 | 调休半天 |
-
-### 1.4 返费相关
-
-| 中文 | 英文术语 | 缩写 | 说明 | 示例 |
-|------|---------|------|------|------|
-| **返费** | rebate | - | 渠道方向劳务公司支付的介绍费 | 返费政策、返费结算 |
-| **佣金** | commission | - | 同"返费"（在某些语境下） | 佣金比例 |
-| **回扣** | kickback | - | ❌ 禁止使用（贬义词） | - |
-| **人头费** | per_capita_fee | - | 按人数计算的返费 | 人头费800元/人 |
-| **达标** | meet_standard / qualified | - | 员工满足返费条件 | 达标30天 |
-| **未达标** | not_meet_standard / unqualified | - | 员工未满足返费条件 | 未达标（不足30天） |
-| **撞单** | duplicate_registration | - | 同一员工被多个渠道重复报名 | 撞单检测 |
-| **结算** | settlement | - | 返费的计算和支付 | 月度结算 |
-
-### 1.5 借支相关
-
-| 中文 | 英文术语 | 缩写 | 说明 | 示例 |
-|------|---------|------|------|------|
-| **借支** | advance_payment | adv | 员工提前支取工资 | 借支500元 |
-| **预支** | advance_payment | - | 同"借支" | 预支工资 |
-| **借款** | loan | - | ❌ 不推荐（容易与金融借贷混淆） | - |
-| **扣款** | deduction | - | 从工资中扣除借支 | 扣款500元 |
-| **还款** | repayment | - | 归还借支 | 还款计划 |
-
-### 1.6 员工状态
-
-| 中文 | 英文术语 | 缩写 | 说明 | 示例 |
-|------|---------|------|------|------|
-| **在职** | working / active | - | 正在工作 | 在职员工 |
-| **离职** | resigned / quit | - | 已离开公司 | 离职日期 |
-| **待岗** | standby / waiting | - | 暂时没有工作安排 | 待岗员工 |
-| **试用期** | probation | - | 试用阶段 | 试用期3个月 |
-| **转正** | regularization | - | 试用期结束，成为正式员工 | 转正日期 |
-| **休假** | on_leave | - | 正在休假中 | 休假中 |
-| **停薪留职** | leave_without_pay | - | 保留职位但不发工资 | 停薪留职 |
-
-### 1.7 合同相关
-
-| 中文 | 英文术语 | 缩写 | 说明 | 示例 |
-|------|---------|------|------|------|
-| **合同** | contract | - | 劳动合同 | 劳动合同 |
-| **劳务合同** | labor_contract | - | 劳务派遣合同 | 劳务合同编号 |
-| **服务协议** | service_agreement | - | 服务合同 | 服务协议 |
-| **签约** | sign_contract | - | 签订合同 | 签约日期 |
-| **续约** | renew_contract | - | 延长合同 | 续约1年 |
-| **解约** | terminate_contract | - | 终止合同 | 解约日期 |
-| **违约** | breach_contract | - | 违反合同 | 违约金 |
-
----
-
-## 🔧 二、技术术语
-
-### 2.1 架构术语
-
-| 中文 | 英文术语 | 缩写 | 说明 | 示例 |
-|------|---------|------|------|------|
-| **后端** | backend | BE | 服务端 | 后端服务 |
-| **前端** | frontend | FE | 客户端 | 前端页面 |
-| **数据库** | database | DB | 数据存储 | 数据库设计 |
-| **缓存** | cache | - | 临时数据存储 | Redis缓存 |
-| **消息队列** | message queue | MQ | 异步消息传递 | RabbitMQ |
-| **接口** | API | - | 应用程序接口 | RESTful API |
-| **微服务** | microservice | - | 服务拆分架构 | 微服务架构 |
-| **单体架构** | monolithic | - | 单一应用架构 | 单体应用 |
-| **分布式** | distributed | - | 多节点部署 | 分布式系统 |
-| **高可用** | high availability | HA | 系统可用性保障 | 高可用架构 |
-| **负载均衡** | load balancing | LB | 流量分发 | 负载均衡器 |
-| **容器化** | containerization | - | Docker容器部署 | 容器化部署 |
-
-### 2.2 开发术语
-
-| 中文 | 英文术语 | 缩写 | 说明 | 示例 |
-|------|---------|------|------|------|
-| **控制器** | controller | - | MVC的C层 | EmployeeController |
-| **服务层** | service | - | 业务逻辑层 | EmployeeService |
-| **数据访问层** | mapper / repository / DAO | - | 数据库操作层 | EmployeeMapper |
-| **实体类** | entity | - | 数据库表映射类 | Employee |
-| **数据传输对象** | data transfer object | DTO | 接口传输对象 | EmployeeDTO |
-| **视图对象** | view object | VO | 前端展示对象 | EmployeeVO |
-| **业务对象** | business object | BO | 业务逻辑对象 | EmployeeBO |
-| **查询对象** | query object | QO | 查询条件对象 | EmployeeQueryDTO |
-| **分页对象** | page object | - | 分页查询结果 | Page<Employee> |
-| **枚举** | enum | - | 枚举类型 | EmployeeStatus |
-| **常量** | constant | - | 不可变值 | BusinessConstant |
-| **工具类** | util / utility | - | 工具方法集合 | DateUtil |
-| **异常** | exception | - | 错误处理 | BusinessException |
-| **拦截器** | interceptor | - | 请求拦截 | TenantInterceptor |
-| **过滤器** | filter | - | 请求过滤 | AuthFilter |
-| **切面** | aspect | - | AOP切面 | LogAspect |
-
-### 2.3 设计模式术语
-
-| 中文 | 英文术语 | 缩写 | 说明 | 示例 |
-|------|---------|------|------|------|
-| **单例模式** | singleton | - | 单一实例 | 配置管理器 |
-| **工厂模式** | factory | - | 对象创建 | SalaryCalculatorFactory |
-| **策略模式** | strategy | - | 算法切换 | PaymentStrategy |
-| **模板方法** | template method | - | 算法框架 | AbstractCalculator |
-| **观察者模式** | observer | - | 事件监听 | EventListener |
-| **装饰器模式** | decorator | - | 功能增强 | CacheDecorator |
-| **代理模式** | proxy | - | 访问控制 | ServiceProxy |
-| **适配器模式** | adapter | - | 接口适配 | ThirdPartyAdapter |
-
----
-
-## 💾 三、数据库术语
-
-### 3.1 PostgreSQL核心术语
-
-| 中文 | 英文术语 | 缩写 | 说明 | 示例 |
-|------|---------|------|------|------|
-| **主库** | primary | - | 主数据库（可写） | Primary节点 |
-| **从库** | standby / replica | - | 从数据库（只读） | Standby节点 |
-| **流复制** | streaming replication | - | WAL流式同步 | 流复制延迟 |
-| **WAL** | write-ahead log | - | 预写日志 | WAL归档 |
-| **复制槽** | replication slot | - | 复制位置标记 | 复制槽管理 |
-| **热备** | hot standby | - | 支持只读的备库 | 热备模式 |
-| **MVCC** | multi-version concurrency control | - | 多版本并发控制 | MVCC机制 |
-| **VACUUM** | vacuum | - | 清理死元组 | VACUUM ANALYZE |
-| **死元组** | dead tuple | - | 已删除但未清理的行 | 死元组清理 |
-| **表膨胀** | table bloat | - | 表空间浪费 | 表膨胀检测 |
-| **分区表** | partitioned table | - | 表分区 | Range分区 |
-| **分区裁剪** | partition pruning | - | 自动过滤无关分区 | 分区裁剪优化 |
-
-### 3.2 数据库对象术语
-
-| 中文 | 英文术语 | 缩写 | 说明 | 示例 |
-|------|---------|------|------|------|
-| **表** | table | - | 数据存储结构 | employee_basic |
-| **视图** | view | - | 虚拟表 | employee_view |
-| **索引** | index | idx | 查询优化结构 | idx_employee_tenant_id |
-| **唯一索引** | unique index | uk | 唯一约束索引 | uk_employee_id_card |
-| **主键** | primary key | pk | 主键约束 | id |
-| **外键** | foreign key | fk | 外键约束 | fk_employee_tenant |
-| **序列** | sequence | seq | 自增序列 | employee_id_seq |
-| **触发器** | trigger | - | 自动执行的函数 | update_updated_at |
-| **函数** | function | - | 存储过程 | update_updated_at_column |
-| **模式** | schema | - | 命名空间 | public |
-| **约束** | constraint | - | 数据完整性规则 | check_salary_positive |
-| **检查约束** | check constraint | - | 字段值校验 | CHECK (salary >= 0) |
-
-### 3.3 索引类型术语
-
-| 中文 | 英文术语 | 缩写 | 说明 | 示例 |
-|------|---------|------|------|------|
-| **B-Tree索引** | B-Tree index | - | 默认索引类型 | 常规查询 |
-| **GIN索引** | generalized inverted index | GIN | 倒排索引 | JSONB、全文搜索 |
-| **BRIN索引** | block range index | BRIN | 块范围索引 | 时序数据 |
-| **Hash索引** | hash index | - | 哈希索引 | 等值查询 |
-| **部分索引** | partial index | - | 条件索引 | WHERE deleted_at IS NULL |
-| **表达式索引** | expression index | - | 基于表达式的索引 | LOWER(name) |
-| **覆盖索引** | covering index | - | 包含所有查询字段的索引 | 避免回表 |
-
-### 3.4 数据类型术语
-
-| 中文 | PostgreSQL类型 | Java类型 | TypeScript类型 | 说明 |
-|------|---------------|---------|---------------|------|
-| **整数** | INTEGER / BIGINT | Integer / Long | number | 整数 |
-| **自增整数** | SERIAL / BIGSERIAL | Long | number | 自增主键 |
-| **浮点数** | DOUBLE PRECISION | Double | number | ❌ 禁止用于金额 |
-| **精确数字** | NUMERIC(p,s) | BigDecimal | string | ✅ 金额必须用 |
-| **字符串** | VARCHAR(n) | String | string | 可变长字符串 |
-| **长文本** | TEXT | String | string | 不限长度文本 |
-| **布尔** | BOOLEAN | Boolean | boolean | 布尔值 |
-| **日期** | DATE | LocalDate | string | 日期（无时间） |
-| **时间** | TIME | LocalTime | string | 时间（无日期） |
-| **日期时间** | TIMESTAMP | LocalDateTime | string | 日期+时间（无时区） |
-| **带时区日期时间** | TIMESTAMPTZ | ZonedDateTime | string | 日期+时间+时区 ✅ 推荐 |
-| **JSON** | JSON | String | object | JSON文本 |
-| **JSONB** | JSONB | String / JsonNode | object | 二进制JSON ✅ 推荐 |
-| **数组** | ARRAY | List<T> | T[] | 数组类型 |
-| **UUID** | UUID | UUID | string | 全局唯一标识 |
-
----
-
-## 🌐 四、API术语
-
-### 4.1 HTTP方法术语
-
-| HTTP方法 | 用途 | 说明 | 示例 |
-|---------|------|------|------|
-| **GET** | 查询 | 获取资源 | GET /api/employees |
-| **POST** | 创建 | 新增资源 | POST /api/employees |
-| **PUT** | 更新（全量）| 完整更新资源 | PUT /api/employees/1 |
-| **PATCH** | 更新（部分）| 部分更新资源 | PATCH /api/employees/1 |
-| **DELETE** | 删除 | 删除资源 | DELETE /api/employees/1 |
-
-### 4.2 RESTful资源命名
-
-| 资源 | URL规范 | 说明 |
-|------|---------|------|
-| **员工** | /api/employees | 复数形式 |
-| **单个员工** | /api/employees/{id} | 资源ID |
-| **员工的工资** | /api/employees/{id}/salaries | 子资源 |
-| **工资列表** | /api/salaries | 独立资源 |
-
-### 4.3 请求参数术语
-
-| 中文 | 英文术语 | 位置 | 说明 | 示例 |
-|------|---------|------|------|------|
-| **路径参数** | path parameter | URL路径 | 资源标识 | /api/employees/{id} |
-| **查询参数** | query parameter | URL参数 | 过滤、排序、分页 | ?status=working&page=1 |
-| **请求体** | request body | HTTP Body | 复杂数据 | JSON对象 |
-| **请求头** | request header | HTTP Header | 元数据 | Authorization |
-
-### 4.4 响应术语
-
-| 中文 | 英文术语 | 说明 | 示例 |
-|------|---------|------|------|
-| **状态码** | status code | HTTP状态码 | 200、400、500 |
-| **响应体** | response body | 返回数据 | JSON对象 |
-| **响应头** | response header | 元数据 | Content-Type |
-| **分页信息** | pagination | 分页元数据 | page、size、total |
-
-### 4.5 标准字段命名
-
-| 字段含义 | 字段名 | 类型 | 说明 |
-|---------|--------|------|------|
-| **主键ID** | id | Long | 主键 |
-| **租户ID** | tenantId | Long | 租户ID |
-| **创建时间** | createdAt | String (ISO 8601) | 创建时间 |
-| **创建人** | createdBy | Long | 创建人ID |
-| **更新时间** | updatedAt | String (ISO 8601) | 更新时间 |
-| **更新人** | updatedBy | Long | 更新人ID |
-| **删除时间** | deletedAt | String (ISO 8601) | 软删除时间 |
-| **版本号** | version | Integer | 乐观锁版本 |
-
----
-
-## 🎨 五、前端术语
-
-### 5.1 Vue术语
-
-| 中文 | 英文术语 | 说明 | 示例 |
-|------|---------|------|------|
-| **组件** | component | 可复用的UI单元 | EmployeeForm.vue |
-| **页面** | page / view | 路由对应的页面 | EmployeeList.vue |
-| **路由** | route | URL到组件的映射 | /employee/list |
-| **状态** | state | 应用数据 | Vuex state |
-| **计算属性** | computed | 派生数据 | computed |
-| **侦听器** | watcher | 数据变化监听 | watch |
-| **生命周期** | lifecycle | 组件生命周期钩子 | mounted |
-| **插槽** | slot | 内容分发 | <slot> |
-| **指令** | directive | DOM操作指令 | v-if、v-for |
-| **组合式API** | composition API | Vue 3 API风格 | setup() |
-
-### 5.2 前端状态管理
-
-| 中文 | 英文术语 | 说明 | 示例 |
-|------|---------|------|------|
-| **状态** | state | 全局状态 | 用户信息、租户信息 |
-| **获取器** | getter | 计算状态 | 派生数据 |
-| **变更** | mutation | 同步修改状态 | SET_USER |
-| **动作** | action | 异步操作 | fetchEmployeeList |
-| **模块** | module | 状态模块化 | user、employee |
-
-### 5.3 前端路由
-
-| 中文 | 英文术语 | 说明 | 示例 |
-|------|---------|------|------|
-| **路由** | route | 路由配置 | { path, component } |
-| **路由器** | router | 路由管理器 | VueRouter |
-| **导航守卫** | navigation guard | 路由拦截 | beforeEach |
-| **动态路由** | dynamic route | 参数路由 | /employee/:id |
-| **嵌套路由** | nested route | 子路由 | children |
-| **路由懒加载** | lazy loading | 按需加载 | () => import() |
-
----
-
-## 📝 六、状态枚举值
-
-### 6.1 员工状态（EmployeeStatus）
-
-| 状态值 | 中文 | 说明 | 备注 |
-|--------|------|------|------|
-| `working` | 在职 | 正在工作 | 默认状态 |
-| `resigned` | 离职 | 已离职 | 终态 |
-| `standby` | 待岗 | 暂无工作安排 | - |
-| `probation` | 试用期 | 试用阶段 | - |
-| `on_leave` | 休假 | 正在休假 | - |
-| `suspended` | 停薪留职 | 保留职位但不发工资 | - |
-
-### 6.2 工资状态（SalaryStatus）
-
-| 状态值 | 中文 | 说明 | 备注 |
-|--------|------|------|------|
-| `pending` | 待计算 | 尚未计算 | 初始状态 |
-| `calculated` | 已计算 | 已计算完成 | - |
-| `approved` | 已审核 | 已通过审核 | - |
-| `paid` | 已发放 | 已支付 | 终态 |
-| `cancelled` | 已取消 | 已作废 | 终态 |
-
-### 6.3 考勤状态（AttendanceStatus）
-
-| 状态值 | 中文 | 说明 | 备注 |
-|--------|------|------|------|
-| `present` | 出勤 | 正常上班 | - |
-| `absent` | 缺勤 | 未到岗 | - |
-| `late` | 迟到 | 晚于规定时间 | - |
-| `early_leave` | 早退 | 早于规定时间 | - |
-| `on_leave` | 请假 | 已批准的假期 | - |
-| `awol` | 旷工 | 无故缺勤 | - |
-
-### 6.3.1 平台打卡事件类型与工时状态
-
-| 类别 | 状态/类型值 | 中文 | 说明 |
-|---|---|---|---|
-| 打卡事件类型 | `clock_in` | 上班打卡 | 工人小程序提交的上班原始事件 |
-| 打卡事件类型 | `clock_out` | 下班打卡 | 工人小程序提交的下班原始事件 |
-| 工时处理状态 | `pending_calculation` | 待计算 | 已接收事件或排班尚未形成班次计算结果 |
-| 工时处理状态 | `calculated` | 已计算 | 已按对应排班和工时规则生成结果 |
-| 工时处理状态 | `needs_correction` | 待补正 | 存在缺卡、错卡或必要信息缺失 |
-| 工时处理状态 | `under_review` | 待复核 | 差异、补正申请或异常正在核对 |
-| 工时处理状态 | `confirmed` | 已确认 | 按项目适用规则由授权主体显式确认 |
-| 工时处理状态 | `adjusted` | 已调整 | 确认后通过关联原记录的调整留痕更正 |
-
-上述状态为需求词汇，最终枚举及状态拆分由领域模型评审确定；不得以单一 AttendanceStatus 混合表达事件类型、计算状态和确认状态。
-
-### 6.4 返费状态（RebateStatus）
-
-| 状态值 | 中文 | 说明 | 备注 |
-|--------|------|------|------|
-| `pending` | 待判定 | 尚未判定是否达标 | 初始状态 |
-| `qualified` | 已达标 | 满足返费条件 | - |
-| `unqualified` | 未达标 | 不满足返费条件 | - |
-| `settled` | 已结算 | 已支付返费 | 终态 |
-| `cancelled` | 已取消 | 已作废 | 终态 |
-
-### 6.5 借支状态（AdvanceStatus）
-
-| 状态值 | 中文 | 说明 | 备注 |
-|--------|------|------|------|
-| `pending` | 待审核 | 申请中 | 初始状态 |
-| `approved` | 已批准 | 已通过审核 | - |
-| `rejected` | 已拒绝 | 审核未通过 | 终态 |
-| `paid` | 已发放 | 已支付借支款 | - |
-| `deducted` | 已扣款 | 已从工资扣除 | 终态 |
-
-### 6.6 审核状态（AuditStatus）
-
-| 状态值 | 中文 | 说明 | 备注 |
-|--------|------|------|------|
-| `pending` | 待审核 | 等待审核 | 初始状态 |
-| `approved` | 已通过 | 审核通过 | 终态 |
-| `rejected` | 已拒绝 | 审核拒绝 | 终态 |
-
-### 6.7 支付状态（PaymentStatus）
-
-| 状态值 | 中文 | 说明 | 备注 |
-|--------|------|------|------|
-| `pending` | 待支付 | 尚未支付 | 初始状态 |
-| `processing` | 处理中 | 支付处理中 | - |
-| `success` | 已成功 | 支付成功 | 终态 |
-| `failed` | 已失败 | 支付失败 | - |
-| `refunded` | 已退款 | 已退回 | 终态 |
-
----
-
-## ⛔ 七、禁止使用的术语
-
-### 7.1 业务术语禁用词
-
-| ❌ 禁止使用 | ✅ 应该使用 | 原因 |
-|-----------|-----------|------|
-| worker | employee | "worker"歧义太多 |
-| staff | employee | 统一用"employee" |
-| wage | salary | 统一用"salary" |
-| payment | salary | "payment"歧义（可能是支付记录） |
-| commission | rebate | "commission"易与销售佣金混淆 |
-| kickback | rebate | "kickback"是贬义词 |
-| loan | advance_payment | "loan"易与金融借贷混淆 |
-| company / organization | tenant（仅表示隔离边界） | tenant 不是公司或组织的同义词；业务对象应使用具体角色或组织术语 |
-| job | project | "job"歧义太多 |
-| task | project | "task"易与任务管理混淆 |
-
-### 7.2 技术术语禁用词
-
-| ❌ 禁止使用 | ✅ 应该使用 | 原因 |
-|-----------|-----------|------|
-| master | primary | 避免敏感词 |
-| slave | standby / replica | 避免敏感词 |
-| blacklist | blocklist | 避免敏感词 |
-| whitelist | allowlist | 避免敏感词 |
-| double / float | BigDecimal / NUMERIC | 金额必须用精确类型 |
-| DATETIME | TIMESTAMPTZ | PostgreSQL推荐带时区 |
-| AUTO_INCREMENT | SERIAL / BIGSERIAL | PostgreSQL语法 |
-| ENGINE=InnoDB | - | PostgreSQL无此概念 |
-
-### 7.3 数据库字段命名禁用词
-
-| ❌ 禁止使用 | ✅ 应该使用 | 原因 |
-|-----------|-----------|------|
-| createTime | created_at | 统一用下划线 |
-| updateTime | updated_at | 统一用下划线 |
-| isDeleted | deleted_at | 软删除用时间戳 |
-| tenantID | tenant_id | 统一用下划线 |
-| employeeID | employee_id | 统一用下划线 |
-| userId | user_id | 统一用下划线 |
-
----
-
-## 📚 八、使用示例
-
-### 8.1 正确示例
-
-#### 数据库表设计：
-```sql
-CREATE TABLE employee_basic (
-  id BIGSERIAL PRIMARY KEY,
-  tenant_id BIGINT NOT NULL,
-  name VARCHAR(50) NOT NULL,
-  status VARCHAR(20) NOT NULL,  -- 'working', 'resigned'
-  
-  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-  deleted_at TIMESTAMPTZ
-);
-```
-
-#### Java实体类：
-```java
-@TableName("employee_basic")
-public class Employee extends BaseEntity {
-    private Long id;
-    private Long tenantId;
-    private String name;
-    private EmployeeStatus status;  // 枚举
-    
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
-    private LocalDateTime deletedAt;
-}
-```
-
-#### API接口：
-```
-GET    /api/employees              # 查询员工列表
-GET    /api/employees/{id}         # 查询员工详情
-POST   /api/employees              # 新增员工
-PUT    /api/employees/{id}         # 更新员工
-DELETE /api/employees/{id}         # 删除员工
-```
-
-#### TypeScript接口：
-```typescript
-interface Employee {
-  id: number;
-  tenantId: number;
-  name: string;
-  status: 'working' | 'resigned' | 'standby';
-  
-  createdAt: string;  // ISO 8601
-  updatedAt: string;
-  deletedAt?: string;
-}
-```
-
-### 8.2 错误示例（❌ 禁止）
-
-#### ❌ 错误的数据库设计：
-```sql
--- 错误1：使用驼峰命名
-CREATE TABLE EmployeeBasic (
-  id BIGINT PRIMARY KEY,
-  tenantId BIGINT,  -- ❌ 应该是 tenant_id
-  createTime TIMESTAMP,  -- ❌ 应该是 created_at
-  isDeleted BOOLEAN  -- ❌ 应该是 deleted_at (时间戳)
-);
-
--- 错误2：使用MySQL语法
-CREATE TABLE employee_basic (
-  id BIGINT AUTO_INCREMENT PRIMARY KEY,  -- ❌ 应该是 BIGSERIAL
-  salary DOUBLE,  -- ❌ 应该是 NUMERIC(10,2)
-  create_time DATETIME  -- ❌ 应该是 TIMESTAMPTZ
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;  -- ❌ PostgreSQL无此语法
-```
-
-#### ❌ 错误的API设计：
-```
-GET    /api/getEmployeeList        # ❌ 不符合RESTful
-POST   /api/addEmployee            # ❌ 不符合RESTful
-POST   /api/employee/delete        # ❌ 应该用 DELETE 方法
-```
-
-#### ❌ 错误的TypeScript类型：
-```typescript
-interface Employee {
-  id: number;
-  tenant_id: number;  // ❌ 应该是驼峰 tenantId
-  salary: number;     // ❌ 金额应该是 string
-  create_time: string;  // ❌ 应该是驼峰 createdAt
-}
-```
-
----
-
-## 🔄 九、术语更新记录
-
-### v1.0（2026-10-17）
-- 初始版本
-- 定义核心业务术语、技术术语、数据库术语
-- 定义状态枚举值
-- 定义禁用术语清单
-
-### v1.1（2026-10-20）
-- 增加交易网络、交易基础设施及劳务供应商术语
-- 明确 tenant 仅描述数据与权限隔离边界，不代表产品采用 SaaS 商业定位
-
-### v1.2（2026-10-20）
-- 增加平台排班、原始打卡事件、计算/确认工时及外部考勤差异等术语
-- 明确工人小程序打卡为平台第一方考勤来源，外部数据不可覆盖平台原始记录
-- 区分考勤状态、打卡事件类型与工时处理状态
-
----
-
-## 📞 十、联系方式
-
-**术语相关问题**：
-- 提Issue：在项目仓库提交术语相关Issue
-- 联系人：技术负责人
-- 审查机制：技术负责人审查后更新本文档
-
-**新术语添加流程**：
-1. 提出新术语需求（Issue/会议/即时通讯）
-2. 技术负责人审查（检查冲突、语义合理性）
-3. 更新本文档
-4. 通知团队成员（会议/公告）
-
----
-
-**文档维护人**：技术负责人  
-**最后更新**：2026年10月20日
-**下次审查**：2026年11月17日
+
+**文档版本**：v2.0
+
+**最后更新**：2026年10月24日
+
+**文档性质**：业务共同语言、技术命名参考及未来能力术语资源；不是规则批准书、接口契约或上线证明。
+
+## 一、使用规则与阅读导航
+
+### 1.1 适用边界
+
+1. 本表围绕“需求—应标—成交—履约—账单—支付状态—对账—监督”建立共同语言，管理能力服务交易与履约，不再以单家劳务公司的内部 SaaS 为主模型。
+2. **当前范围**表示当前平台需求中的概念，不代表相关规则已批准、功能已开发或真实业务已启用；**未来资源**表示备选发展方向，不代表已承诺建设、已取得资格或已接入机构；**基础概念**用于理解业务和技术，不独立产生业务权限。
+3. 中文名称是沟通规范名；英文名称是语义和命名候选，不等于现有表名、字段、接口或枚举。已有代码需通过契约评审和兼容迁移调整，不因本表发布而直接重命名。
+4. 法律、合同、有效批准规则及已确认的需求基线不能被本表覆盖。发现冲突应回到相应责任人和规则来源决策，再同步术语、需求及实现，不以“术语统一”悄悄改变责任。
+5. 本表中的法律、金融词汇用于识别边界和准备讨论，不替代适用法律核查、机构尽调、专业意见或业务准入。外部资料的核验范围见第十四章。
+6. 同义表达可作为检索别名，但同一业务包应选定规范名；同名不同义必须补足主体、款项类别、规则版本和状态维度，不能用一个“已结算”覆盖整条交易链。
+
+### 1.2 导航
+
+- [平台定位与交易基础设施](#platform)
+- [身份、组织与参与方](#actors)
+- [需求、成交与供给履约](#transaction)
+- [考勤、计量、工资与返费](#fulfillment)
+- [账单、资金与支付编排](#funds)
+- [监督、信用与增长](#governance)
+- [数据支撑与数据治理](#data)
+- [未来劳务保理与供应链金融](#factoring)
+- [技术、数据库、API 与前端](#technology)
+- [状态词汇与门禁](#states)
+- [歧义消除与历史命名迁移](#migration)
+- [跨链理解示例](#examples)
+- [术语资源、维护与更新记录](#resources)
+
+<a id="platform"></a>
+## 二、平台定位与交易基础设施
+
+**适用标记：当前范围；其中长期平台形态为发展方向，不是当前交付声明。**
+
+| 规范术语 | 英文候选 / 缩写 | 项目语义与边界 |
+| --- | --- | --- |
+| 劳务供应链 | labor services supply chain | 用工方、劳务供应商、协同供应商、经纪人及工人围绕需求、人员组织、履约和结算形成的协作链；不是买卖工人。 |
+| 劳务供应链交易平台 | labor supply-chain transaction platform | 承载多方交易、履约记录、资金状态和中立监督的平台；不是供应商内部管理软件，也不只是发布需求的网站。 |
+| 交易网络 | transaction network | 各方在平台形成的可重复交易与协作关系；网络增长不以平台承担供人、工资垫付或信用兜底为前提。 |
+| 劳务供应链交易基础设施平台 | labor supply-chain transaction infrastructure platform | 为多主体提供共同身份、交易语义、履约证据、账单、授权、对账和争议机制的长期产品形态；不等于已成为金融基础设施。 |
+| 交易闭环 | transaction closed loop | 交易条件、履约、账单、资金证据、核验、对账与异常处理能够追踪；不要求全部资金进入平台账户。 |
+| 交易编排 | transaction orchestration | 按主体责任和授权衔接业务步骤及状态；平台组织流程，不因此取得采购、工资或融资审批权。 |
+| 交易标准化 | transaction standardization | 对需求、报价、履约、证据及结算口径建立可比规则和版本；不是抹平不同合同的真实差异。 |
+| 劳务服务标项 | labor service item / lot | 可报价和验收的岗位、服务范围或成果单元；交易对象是约定的服务，不是人的所有权。 |
+| SaaS | software as a service | 软件交付和服务方式；可用于描述某项管理工具，但不是本项目业务定位的替代词。 |
+| 机构连接层 | institution integration layer | 面向银行、支付、保险及未来保理机构的授权接口和状态适配能力；接入意向不等于正式接通。 |
+| 互操作性 | interoperability | 不同组织和机构对身份、业务对象、状态及证据能一致解释；仅能调用接口不代表业务语义一致。 |
+| 生态协作 | ecosystem collaboration | 在明确准入、合同、数据授权和责任边界下接入合作方；不是平台对合作方服务结果无条件担保。 |
+| 平台运营主体 | platform operator entity | 提供平台服务并承担自身合同责任的经营主体；与未来可能设立或合作的保理、支付等主体区分。 |
+| 金融基础设施 / 征信服务 | financial infrastructure / credit reporting service | 涉及专门制度与业务边界的外部概念；不能因平台有账单、支付入口或信用档案而自行宣称具备相应资格。 |
+
+<a id="actors"></a>
+## 三、身份、组织与参与方
+
+**适用标记：当前范围；资金方、保理人为未来资源。**
+
+| 规范术语 | 英文候选 / 缩写 | 项目语义与边界 |
+| --- | --- | --- |
+| 账号 | account | 登录身份；个人账号不自动构成组织、租户或有权代表企业签约的主体。 |
+| 组织 | organization | 业务参与主体及其组织空间；应记录主体身份、认证和授权，不用“公司”覆盖全部组织类型。 |
+| 租户 | tenant | 技术数据和权限隔离边界；当前基座以组织作为租户边界，平台自身也有组织空间，不存在默认跨组织查询权。 |
+| 组织成员关系 | organization membership | 账号加入组织的角色、权限和有效期关系；身份认证通过不等于成员关系和业务授权仍有效。 |
+| 主体认证 / 经办授权 | entity verification / representative authorization | 分别核验组织真实性及经办人能代表组织做什么；上传营业执照不能替代全部授权。 |
+| 用工方 / 用工单位 | labor service buyer / work unit | 发布真实需求、选择供应商并按合同承担确认和付款责任的组织角色；不直接等同劳动法意义的用人单位。 |
+| 用人单位 | legal employer | 实际劳动关系中的责任主体，依事实、合同和适用规则判断；不能由平台角色名称直接推定。 |
+| 劳务供应商 / 劳务公司 | labor supplier | 经准入、应标并按实际合同承担相应人员组织、交付和付款责任的组织；平台界面不得吞掉其责任。 |
+| 主供应商 | lead supplier | 对相应标项或配额承担主要合同交付责任的供应商；采用协同供给不自动转移对用工方的责任。 |
+| 协同供应商 | cooperating supplier | 经授权参与供应商之间供给协作的组织；其与主供应商、工人间的合同和结算关系需分别确认。 |
+| 经纪人 | labor broker | 在授权范围内提供人员组织或推荐服务的合作方；不自动具备供应商、雇主或资金审批人身份。 |
+| 招聘渠道 | recruiting channel | 候选人或供给的来源及合作路径；可关联组织或个人，不等于单一法定主体类型。 |
+| 工人 | worker | 实际参与招聘或履约的个人；是否为某组织员工、由谁承担工资及其他责任需另行判断。 |
+| 员工 | employee | 在明确组织和劳动关系语境下使用；不能把平台全部工人默认称为平台员工或供应商员工。 |
+| 招聘专员 / 驻场人员 | recruiter / on-site coordinator | 被授权承担招聘或现场协调职责的人员；操作记录、履约确认与财务审批权限分别控制。 |
+| 平台审核人员 | platform reviewer | 按规则审核主体、需求或证据的人员；审核通过不代表平台代替交易方履约或付款。 |
+| 独立复核人员 | independent reviewer | 在回避利益冲突后复核投诉、申诉或平台自身处理的人员；不得默认由原处理人复核自己。 |
+| 人事经理贡献人 | HR contributor | 在制度要求下形成可核验服务贡献的参与人；组织职务本身不自动产生个人收益权。 |
+| 跨企业直接推荐人 | direct cross-company referrer | 引荐其他企业并可验证直接贡献的参与人；不因此建立层层分佣关系。 |
+| 资金方 / 保理人 | funder / factor | 未来独立决定融资或受让应收账款的机构；不是平台运营主体的默认别名。 |
+| 核心企业 / 应收账款债务人 | anchor enterprise / account debtor | 前者是供应链协作或风控语境中的角色，后者是具体应收账款付款义务人；不能仅凭“核心企业”标签推定付款担保。 |
+| 管理员 / 操作员 | administrator / operator | 权限角色而非无限制特权；必须限定组织、对象、动作和有效授权。 |
+
+<a id="transaction"></a>
+## 四、需求、成交与供给履约
+
+**适用标记：当前范围。业务包应分别确认规则、开发、联调和启用状态。**
+
+| 规范术语 | 英文候选 / 缩写 | 项目语义与边界 |
+| --- | --- | --- |
+| 用工需求 | labor demand | 包含真实主体、服务范围、地点、岗位、数量、期限、报价及结算条件的结构化采购需求。 |
+| 需求源头 | demand origin | 需求由谁提出、经谁授权、关联哪个实际用工组织及现场；线索提交人不自动是采购或付款主体。 |
+| 需求核验 | demand verification | 核验需求真实性、授权、可履约性及规则符合性；不是平台保证交易必然成功。 |
+| 招标 / 应标 | sourcing / bid submission | 本平台的结构化供需选择和报价流程；使用“招标”不自动表示适用法定公开招投标程序。 |
+| 报价方案 | commercial proposal | 供应商提出的价格、服务、人数、期限及条件版本；报价不等于买方接受。 |
+| 定标 / 中标 | award decision / award | 用工方按规则选择供应商的决定及结果；不等于双方已确认所有成交条件。 |
+| 供应商配额 | supplier allocation | 向某供应商分配的岗位、人数或服务量；计划配额不等于实际到岗或有效履约量。 |
+| 双方确认成交条件 | bilateral terms confirmation | 有权代表双方的人员确认同一版本条件；一方修改后不得沿用另一方对旧版本的确认。 |
+| 成交条件快照 | transaction terms snapshot | 记录双方确认的服务、计价、账期、责任及规则版本；变更应另建关联版本，不覆盖历史依据。 |
+| 项目 | project | 承接成交条件、供应商配额、人员、排班、履约、计费和结算的业务单元；不是异步任务或岗位的通用译名。 |
+| 协同供给 | collaborative supply | 主供应商按授权引入协同供应商或渠道的供给安排；须保留上下游合同、可见性和责任边界。 |
+| 候选人 / 报名 | candidate / application | 表达求职或参与意向的人及其申请记录；报名不等于录用、到岗或工资债权成立。 |
+| 招聘归属 | recruitment attribution | 在适用规则下确认候选人与渠道、供应商的贡献关系；不是对工人的所有权。 |
+| 入职 / 项目入场 | employment onboarding / project onboarding | 前者用于明确劳动关系场景，后者用于项目参与；应分别记录，不能由平台入场动作自动建立劳动关系。 |
+| 投保 / 保障生效 | insurance enrollment / coverage effective | 保险申请、承保及保障生效等不同事实；提交投保不等于保险已生效或所有风险均获保障。 |
+| 到岗 / 离场 | arrival / project exit | 人员实际到现场参与或退出项目的事件；离场不自动等于劳动合同解除或工资已付清。 |
+| 履约关系 | fulfillment engagement | 工人、项目、供应商、岗位及有效期间的业务关联；与账号成员关系、劳动关系分别建模。 |
+| 履约验收 / 差异处理 | fulfillment acceptance / discrepancy resolution | 依约确认服务结果并处理不同来源证据的差异；单方上传材料不等于对方认可。 |
+| 劳务派遣 / 服务外包 / 招聘中介 | labor dispatch / service outsourcing / recruitment intermediary | 不同业务和法律关系的检索概念；具体模式依真实安排、合同和专业核查确定，不能靠改产品名称转换性质。 |
+
+<a id="fulfillment"></a>
+## 五、考勤、计量、工资与返费
+
+**适用标记：当前范围。四类计量口径不得共用未经区分的“有效工时”。**
+
+| 规范术语 | 英文候选 / 缩写 | 项目语义与边界 |
+| --- | --- | --- |
+| 排班 / 班次 | shift assignment / shift | 按版本确定工人、岗位、日期和计划工作时段；计划时间不等于实际出勤。 |
+| 平台原始打卡事件 | platform clock event | 工人通过平台小程序提交的上班、下班等原始事件，关联项目、履约关系、班次和接收时间；不被外部考勤覆盖。 |
+| 外部考勤记录 | external attendance record | 用工方、工厂或其他授权来源提供的独立记录，用于比对；记录来源和导入时间。 |
+| 补正事件 | attendance correction event | 经规定流程补充或修正考勤依据的关联事件；不得直接擦除原始打卡。 |
+| 计算工时 | calculated work hours | 依据排班、事件及适用规则计算的候选结果；不自动成为工资或结算依据。 |
+| 确认工时 | confirmed work hours | 经规定主体确认、绑定依据和规则版本的工时快照；后续变化通过调整关联。 |
+| 工资计量口径 | wage measurement basis | 用于计算应付工人报酬的时间、件数或其他约定依据；须明确责任主体和规则。 |
+| 供应商结算口径 | supplier settlement basis | 用工方与供应商按合同确认服务价款的计量依据；可能不同于工资口径。 |
+| 返费权益口径 | recruiting reward eligibility basis | 判断渠道或经纪人是否满足约定奖励条件的依据；到岗或出勤不必然直接产生可支付返费。 |
+| 平台有效计费人天 | effective billable person-day | 按平台收费规则核验的计费单位；不等于报名人数、计划人数、到岗人数或全部考勤人天。 |
+| 计量规则版本 | measurement rule version | 将输入、计算和确认结果绑定到特定适用规则；历史结果不能用新规则静默重算覆盖。 |
+| 工资 / 工资单 | wages / wage statement | 由实际责任主体按适用安排承担的工人报酬及明细；平台生成工资单不等于平台承担工资债务。 |
+| 工资核算 / 工资发放 | payroll calculation / wage disbursement | 前者形成应付计算，后者是资金执行；不能将“核算完成”显示为“已发工资”。 |
+| 借支 | wage advance / advance request | 在明确责任、授权和规则下提出的提前付款安排；不是平台默认向工人放贷或垫资。 |
+| 返费 / 招聘奖励 | recruiting reward | 在本项目通常指劳务公司按约向有资格的渠道或经纪人支付的招聘服务奖励；具体付款方、收款方、条件、税务及审批须明确，不泛指渠道向劳务公司付款。 |
+| 返费权益确认 / 返费支付 | reward entitlement confirmation / reward payment | 分别表示条件已核验产生应付权益、款项已执行支付；两者不可用一个“已结算”代替。 |
+| 佣金 / 渠道服务费 | commission / channel service fee | 有合同和真实服务依据的报酬类型；不能无条件等同返费、人事经理奖励或平台服务费。 |
+| 回扣 | kickback | 需识别利益冲突、采购廉洁和违法风险的表述；不能通过改名“佣金”“返费”取得合法性。 |
+
+<a id="funds"></a>
+## 六、账单、资金与支付编排
+
+**适用标记：当前范围；机构支付集成的建设及真实启用按独立门禁核定。**
+
+| 规范术语 | 英文候选 / 缩写 | 项目语义与边界 |
+| --- | --- | --- |
+| 资金责任链 | payment responsibility chain | 分别识别用工方→供应商、供应商→工人、供应商→渠道/协同方、供应商→平台，以及未来机构融资；不能合成平台统一债务。 |
+| 应收账款 / 应付账款 | accounts receivable / accounts payable, AR / AP | 从明确主体视角记录已形成的收款权利或付款义务；双方金额、确认和争议状态需核对。 |
+| 账单 | bill / statement | 对特定付款方、收款方、服务期间和款项类别的计量与金额明细；不等于发票、收款凭证或融资凭证。 |
+| 账单确认 / 锁定 | bill confirmation / bill lock | 对账单内容的业务确认及版本控制；不代表已经支付、无争议或永远不可调整。 |
+| 调整单 | adjustment note | 引用原账单或确认快照，记录补差、扣减及理由；保留审批和历史，不直接覆盖原金额。 |
+| 对账 | reconciliation | 比对业务账单、各方账簿与资金证据并解释差异；不是单方点击“确认”或上传截图。 |
+| 核销 / 收款分配 | receivable clearing / receipt allocation | 把已核验回款按规则关联到一笔或多笔应收；一单多次收款、一款对应多单须防止重复分配。 |
+| 账期 / 到期日 | payment terms / due date | 约定付款时间的条件及计算后的具体日期；须说明起算事件、日历口径及变更依据。 |
+| 未到期 / 逾期 | not yet due / overdue | 对未清偿金额与到期时间的判断；争议、付款结果未知等状态仍须独立表达。 |
+| 部分回款 / 未收余额 | partial receipt / outstanding receivable | 已核验部分回款及扣除有效调整后的未收金额；不等于融资余额或账户可用余额。 |
+| 线下对公支付 | offline corporate payment | 交易方通过对公账户在平台外付款；仍需账期、凭证、核验、核销和对账，是可管理的闭环路径。 |
+| 支付凭证 / 银行流水 | payment evidence / bank transaction record | 前者是提交的证明材料，后者是银行交易记录；均需核对主体、金额、时间和关联账单，截图上传不等于到账。 |
+| 已付款 / 已收款 | payment made / receipt verified | 分别从付款与收款侧描述事实；必须标明证据来源，付款方声明不自动等于收款方确认到账。 |
+| 支付指令 | payment instruction | 由有权主体授权的支付请求，含付款方、收款方、用途、金额及稳定业务标识；不是平台自行决定付款。 |
+| 支付审批 / 支付执行 | payment approval / payment execution | 实际责任主体批准与银行/支付机构执行是不同步骤；用工方确认服务量不替供应商批准工资。 |
+| 支付批次 / 明细 | payment batch / payment item | 多笔支付的组织容器及单项记录；批次部分成功时须保留各明细结果。 |
+| 机构回执 | institution acknowledgement | 机构返回受理或执行状态的记录；受理成功不等于到账成功，平台状态不得替代机构事实。 |
+| 支付结果未知 | unknown payment outcome | 请求可能已被机构执行但暂未取得确定结果；按原指令查询核验，不用新幂等键盲目重付。 |
+| 退款 / 退回 | refund / payment return | 付款成功后的逆向款项与机构执行中或执行后的退回等不同情形；用关联记录表达，不抹去原支付。 |
+| 资金账户 / 可用余额 | funds account / available balance | 标明账户所属主体、机构及限制条件；业务台账余额不等于银行可用余额，平台普通账户不默认作为客户资金池。 |
+| 支付编排 / 清分 | payment orchestration / allocation calculation | 前者组织授权、指令与状态，后者计算各方分配金额；均不当然赋予平台保管、划拨或清算客户资金的权限。 |
+| 平台服务费 | platform service fee | 平台按已批准收费规则提供交易与履约服务的对价；计费依据和现行标准以商业模式文档为准。 |
+| 保证金 / 保理费用 | deposit / factoring charges | 分别属于履约保障和未来融资服务安排，不能混入平台服务费或工资；主体、用途及退付条件另定。 |
+
+<a id="governance"></a>
+## 七、监督、信用与增长
+
+**适用标记：当前范围；对外风险数据和融资用途另需授权及启用批准。**
+
+| 规范术语 | 英文候选 / 缩写 | 项目语义与边界 |
+| --- | --- | --- |
+| 中立监督 | neutral oversight | 对用工方、供应商、经纪人和平台自身均实施有证据、可申诉的约束，不只监督供应商。 |
+| 投诉 / 申诉 | complaint / appeal | 提出问题及请求复核处理结果的机制；投诉成立、责任认定和处置执行分别记录。 |
+| 利益冲突 / 回避 | conflict of interest / recusal | 识别处理人与当事人的利益关系并限制其参与；平台人员不因身份特殊免于监督。 |
+| 违约认定 / 处置执行 | breach determination / enforcement action | 按规则完成事实与责任判断，再执行授权措施；举报或算法提示不直接等于违约。 |
+| 交易信用档案 | transaction credit profile | 汇集有来源、核验、争议及可见范围的交易事实；不是所有人可见的黑名单或统一信用评分。 |
+| 信用事实 | credit-related fact | 可追溯的履约、账单、回款、争议等事实；区分平台原始记录、双方确认、单方举证和外部回执。 |
+| 风险提示 / 信用评价 | risk signal / credit assessment | 基于明确数据、规则和期间形成的提示或评价；事实、推断和机构独立决策必须区分。 |
+| 人事经理贡献奖励 | HR contribution reward | 对符合制度、授权、真实服务和利益冲突要求的贡献支付奖励的候选路径；不是按采购职务默认私下分佣。 |
+| 跨企业直接推荐奖励 | direct referral reward | 按制度识别直接引荐、归因和实际转化后核算的奖励；不是多层分销或永续抽佣。 |
+| 推荐线索 / 转化归因 | referral lead / conversion attribution | 企业引荐记录及可核验贡献关联；线索、有效需求、成交、实际合格回款是不同阶段。 |
+| 奖励计提 / 奖励可支付 | reward accrual / reward payable | 按规则计算候选金额，与资格、实际合格回款、预算、合同、税务和审批完成后的可支付状态分开。 |
+| CRM | customer relationship management | 管理线索、企业联系和转化证据的工具；不能以销售归属覆盖组织授权或交易事实。 |
+
+<a id="data"></a>
+## 八、数据支撑与数据治理
+
+**适用标记：交易证据和内部治理属当前范围；面向机构的数据产品、风控支撑及收费属未来资源。**
+
+| 规范术语 | 英文候选 / 缩写 | 项目语义与边界 |
+| --- | --- | --- |
+| 数据支撑 | data support | 用可追溯、可解释、获授权的数据支持交易运营、履约核验及未来机构判断；不是承诺融资获批。 |
+| 业务证据链 | business evidence chain | 把主体、授权、需求、合同、成交、履约、账单、付款及争议按引用和版本关联；关联完整不自动证明全部内容真实。 |
+| 原始数据 / 核验数据 | source data / verified data | 分别指保留来源的原始记录，以及经特定流程核验的记录；须记录核验主体、方法、时间和范围。 |
+| 数据来源 / 数据血缘 | data provenance / data lineage | 分别追踪数据由谁、何时、从何处产生，以及如何经处理形成结果；便于审查和纠错。 |
+| 主数据 / 元数据 | master data / metadata | 主体、项目等共用对象的规范信息，以及描述数据含义、来源和结构的信息；不是任意共享全部明细。 |
+| 数据字典 / 数据契约 | data dictionary / data contract | 字段语义、单位和取值说明，以及生产方和使用方约定的结构、质量与变更规则。 |
+| 数据质量 | data quality | 完整性、准确性、一致性、及时性和唯一性等维度的可检查情况；有数据不等于质量合格。 |
+| 指标口径 | metric definition | 明确分子、分母、期间、样本、排除项、单位及规则版本；无样本或样本不足不直接等于低信用。 |
+| 账龄分析 | receivable aging analysis | 以明确基准日、到期口径和未收余额分组；账龄口径与账单产生时长不得混用。 |
+| 时点快照 | point-in-time snapshot | 保留某时刻可见的数据及规则版本；不能用后来补录的事实冒充当时已知依据。 |
+| 核验状态 / 争议状态 / 可见范围 | verification / dispute / visibility | 三个独立维度；核验通过不等于无争议，更不等于可向所有机构提供。 |
+| 授权数据投影 | authorized data projection | 向特定组织或机构提供最小必要的授权视图及来源引用；不是开放原组织数据库或跨租户查询。 |
+| 用途限定 / 最小必要 | purpose limitation / data minimization | 明确接收方、用途、字段、有效期及可否再提供；一笔交易授权不自动覆盖未来融资营销。 |
+| 处理合法性基础 / 同意 | lawful basis / consent | 明确处理依据；涉及同意时记录知情范围、撤回等，不能把“用户勾选”视为所有处理均合法。 |
+| 个人信息 / 敏感个人信息 | personal information / sensitive personal information | 按适用法律识别；工人身份、金融账户、定位等场景须分别评估必要性和保护要求，不因业务需要而无条件收集。 |
+| 脱敏展示 | data masking | 遮蔽部分内容以限制展示；不等于去标识化、匿名化或已取得对外提供权限。 |
+| 去标识化 | de-identification | 不借助额外信息无法识别特定个人的处理；仍须防止关联还原，不能当作匿名数据自由流转。 |
+| 匿名化 | anonymization | 达到无法识别特定个人且不能复原的处理要求；删除姓名或替换为编号并不当然达标。 |
+| 加密 / 完整性校验 | encryption / integrity verification | 分别保护可读性及识别内容变化；哈希、签名或存证不证明基础交易真实、无争议或权利合法。 |
+| 更正传播 / 数据撤回 | correction propagation / data withdrawal | 将更正及适用的撤回处理传递到授权投影和接收方；保留必要引用，不静默重写历史。 |
+| 保留期限 / 删除 | retention period / deletion | 根据目的、法定义务及争议处理确定保留和删除要求；审计需要不是无限期保存全部个人信息的理由。 |
+| 数据服务包 / 融资资料包 | data service package / financing information package | 按用途提供来源、指标、证据、版本、授权及争议说明的组合；不等于售卖原始个人信息。 |
+| 数据资源 / 数据产品 / 数据资产 | data resource / data product / data asset | 分别描述持有的数据、按用途组织的服务输出及需另行判断的资产语境；有数据不等于享有全部权利或满足会计入表条件。 |
+| 决策支持 / 自动化决策 | decision support / automated decision-making | 提供可解释信息与程序直接分析并决策的不同用途；不能把平台风险标签自动变成拒贷或处罚结论。 |
+| 信用数据服务 / 征信业务 | credit data service / credit reporting business | 需依实际服务内容、主体和适用制度另行识别的边界；改名“数据支撑”不能规避应有合规审查。 |
+
+<a id="factoring"></a>
+## 九、未来劳务保理与供应链金融
+
+**适用标记：本章全部为未来资源，不是当前金融产品、授信承诺或业务批准。**
+
+项目中的“劳务保理”是围绕真实劳务服务交易应收账款开展保理协作的业务讨论简称，不是工人工资债权融资的默认设计，也不是独立法定产品分类。机构须按实际交易、主体、权利及产品条件独立判断。
+
+| 规范术语 | 英文候选 / 缩写 | 项目语义与边界 |
+| --- | --- | --- |
+| 保理 / 保理合同 | factoring / factoring contract | 以现有或将有的应收账款转让为基础，由保理人提供融资、应收管理、催收或债务人付款担保等服务的安排；不一定只有融资。 |
+| 劳务服务应收账款 | labor service receivable | 供应商按真实合同及履约对用工方形成的服务价款债权；与供应商对工人的应付工资、平台服务费债权分开。 |
+| 基础交易 / 基础合同 | underlying transaction / contract | 应收账款产生所依赖的真实服务及合同关系；平台账单或发票不能单独替代全部基础交易核验。 |
+| 应收账款债权人 / 让与人 | receivable creditor / assignor | 持有并按约转让相应应收的主体；劳务场景通常需核验具体供应商，而非默认平台。 |
+| 应收账款债务人 | account debtor | 对特定应收负有付款义务的主体；实际用工现场、集团品牌与合同付款主体可能不同。 |
+| 保理人 / 受让人 | factor / assignee | 按合同受让应收并提供相应服务的主体；资金方未必就是债权受让人。 |
+| 现有应收 / 将有应收 | existing / future receivable | 已形成与将来形成的应收概念；将有应收不是虚构应收，机构是否接受及如何识别另行审查。 |
+| 合格应收账款 | eligible receivable | 满足特定机构产品对真实性、权属、履约、期限及争议等条件的应收；平台确认不自动意味着机构合格。 |
+| 确权 / 债务确认 | receivable verification / debtor confirmation | 业界常用“确权”应拆解为主体、合同、履约、金额及债务人确认等具体动作；一次点击不能保证权属无瑕疵。 |
+| 债权转让 | assignment of receivable | 债权依约转移的安排；上传资料、提出融资申请或完成平台审核都不自动完成转让。 |
+| 应收账款质押 | receivables pledge | 与债权转让不同的担保安排；权利设立、登记和实现条件须按适用制度核查，不能混称保理。 |
+| 转让通知 | notice of assignment | 向债务人通知债权转让的动作及送达证据；与债务确认、登记及融资放款分别记录。 |
+| 动产融资统一登记 | unified movable financing registration | 与应收转让、质押等相关的登记检索资源；适用业务、登记主体和效力须另查，不以登记替代真实性审查或保证优先受偿。 |
+| 重复转让 / 重复融资核验 | duplicate assignment / financing check | 结合登记、合同、机构核查和历史记录识别重复安排；本平台内查无记录不代表外部不存在。 |
+| 有追索权保理 | recourse factoring | 按约保理人可向应收债权人主张返还融资本息或回购等；具体责任以适用规则和合同为准，不转给平台承担。 |
+| 无追索权保理 | non-recourse factoring | 与有追索权保理不同的约定安排；不能理解为虚假交易、履约瑕疵、欺诈等全部风险均被无条件豁免。 |
+| 追索 / 回购 | recourse / repurchase | 特定条件触发的责任请求或应收回购义务；是否存在、由谁承担、触发条件须逐项约定。 |
+| 正向保理 / 反向保理 | supplier-led / reverse factoring | 分别常指供应商侧发起、买方侧组织的协作模式；买方组织不自动产生集团担保或免除债权审查。 |
+| 联合保理 | joint factoring | 多家机构按约协作提供保理服务的模式；角色、债权份额、资金和风险分担不能由名称推定。 |
+| 融资申请 / 机构授信 | financing application / credit approval | 提交需求与机构独立评估授予额度是不同步骤；平台通过审核不等于机构授信。 |
+| 授信额度 / 可用额度 | credit limit / available limit | 机构批准上限与扣除占用、冻结等后的可用部分；不等于实际可立即支取金额。 |
+| 融资比例 / 融资金额 | advance rate / financed amount | 以机构认可的合格应收等基数按约计算的比例及金额；不是对全部账单无条件按比例放款。 |
+| 融资余额 / 应收未收余额 | outstanding financing / outstanding receivable | 前者为尚未偿还的融资债务，后者为应收债权未回收部分；必须分别核算。 |
+| 融资期限 / 回款期限 | financing tenor / receivable maturity | 融资占用期间与基础债权付款安排；到期错配风险不能被统一“账期”掩盖。 |
+| 融资利息 / 保理服务费 / 平台协作费 | financing interest / factoring service fee / platform facilitation fee | 不同主体、不同服务的费用；费率、税务及收取条件另行批准，本表不设现行费率。 |
+| 指定回款账户 / 回款分配 | designated collection account / collection allocation | 按合同、通知和机构安排收款并分配；不默认通过平台普通运营账户归集客户资金。 |
+| 应收减损 / 抵销 / 折让 | dilution / set-off / allowance | 履约差异、合同调整或其他抗辩使可回收金额变化的不同来源；账单确认后仍可能需要依法依约处理。 |
+| 债务人信用风险 / 履约争议风险 | debtor credit risk / performance dispute risk | 无力付款与交易服务、金额等争议的不同风险；机构承担何种风险须具体约定。 |
+| 集中度 / 账龄 / 逾期率 | concentration / aging / overdue ratio | 用于观察主体集中、时间结构及回收表现的指标；须附时点、分母、样本、调整和争议口径。 |
+| 尽职调查 / KYC / KYB | due diligence / know your customer / know your business | 对客户、企业及交易的身份、权利与风险核查概念；平台认证不替代机构尽调。 |
+| 反洗钱 | anti-money laundering, AML | 未来合作机构及相关责任主体须按适用要求履行的义务领域；不能因有实名登录宣称已完成全部义务。 |
+| 资产池 | receivables pool | 按条件组织的应收集合，可用于分析或机构管理；不自动成为可交易资产、证券化产品或平台可处置财产。 |
+| 资产证券化 | asset-backed securitization, ABS | 需独立结构、参与主体和合规安排的外部概念；不是把账单打包后即可发行。 |
+| 供应链金融 | supply-chain finance | 基于真实供应链交易及主体协作的金融服务集合；保理只是可能路径之一，不等于平台贷款或工资垫资。 |
+| 保理协作平台 / 保理经营主体 | factoring collaboration platform / factoring entity | 前者提供数据、流程和机构连接，后者承担实际保理业务；即使未来关联设立也需独立主体、合同与风险审批。 |
+
+<a id="technology"></a>
+## 十、技术、数据库、API 与前端参考
+
+**适用标记：基础概念。当前实现事实以技术方案、技术交接文档和代码为准；术语存在不表示能力已实现。**
+
+| 规范术语 | 英文候选 / 缩写 | 项目语义与边界 |
+| --- | --- | --- |
+| 模块化单体 / 领域边界 | modular monolith / bounded context | 当前后端采用模块化单体组织；身份、交易、履约、资金等语义边界不等于已经拆为微服务。 |
+| 多租户隔离 | multi-tenancy isolation | 当前基座按组织限制数据访问，已登记表按租户表/共享表策略处理，未知表默认拒绝；不是给每条业务查询手工补条件即可保证安全。 |
+| 跨组织交付 | cross-organization delivery | 经批准把必要业务事实交付到目标组织的专用机制概念；不能使用跨租户直接读取替代，具体能力仍待业务实现。 |
+| 身份认证 / 授权 | authentication / authorization | 分别回答“是谁”和“能做什么”；当前后端校验外部受信令牌，不因此成为完整身份签发系统。 |
+| 执行上下文 | ExecutionContext | 承载当前身份、租户和权限等服务端上下文；客户端提交的租户标识不能自行建立可信上下文。 |
+| RBAC / 对象级授权 | role-based access control / object-level authorization | 角色权限与对具体项目、账单、文件等对象的检查；具备接口权限不代表可访问所有对象。 |
+| JWT / RS256 | JSON Web Token / RSA SHA-256 | 令牌载体及签名算法相关概念；有效签名不等于组织成员关系、业务授权永久有效。 |
+| 幂等 / 本地事务 | idempotency / local transaction | 重试不重复产生约定副作用，以及数据库内原子提交；当前本地幂等不能保证远程支付原子性，重放前仍须授权。 |
+| 异步任务 / 至少一次投递 | asynchronous task / at-least-once delivery | 当前任务队列可能重复执行，处理器须防重复；任务上下文不能自动恢复原调用者全部权限。 |
+| 审计记录 / 不可篡改存证 | audit record / tamper-resistant evidence | 当前同事务审计会随事务回滚；不能宣称等同独立不可篡改账本或司法真实性结论。 |
+| DTO / 领域对象 / VO | data transfer object / domain object / view object | 分别服务接口传输、业务语义和展示；不能把数据库实体直接视为跨组织共享契约。 |
+| 数据库事务 / 乐观锁 | database transaction / optimistic locking | 保障本地一致性及识别并发修改的技术手段；不能代替双方业务确认。 |
+| 主键 / 外键 / 索引 | primary key / foreign key / index | 标识、引用和查询支持机制；索引不是业务唯一性或权限保证，约束需单独设计。 |
+| 数据迁移 / Flyway | schema migration / Flyway | 版本化管理数据库结构变化；不是无评审覆盖业务数据或修改已执行迁移的理由。 |
+| PostgreSQL / JSONB | PostgreSQL / JSONB | 当前关系数据库与其 JSON 数据类型；结构灵活不意味着可以省略字段语义和数据契约。 |
+| 数据库序列 ID / UUID | sequence identifier / UUID | 对象标识方式；当前序列允许空洞，不能当作连续会计凭证号，文件标识与业务权限分开处理。 |
+| 金额精度 / 金额舍入 | monetary precision / rounding | 按币种、计价、税费和业务规则确定的小数处理；工具类不能统一替代全部财务规则。 |
+| REST / HTTP 方法 | representational state transfer / HTTP methods | 接口设计风格及传输语义；状态变更权限、幂等和审计仍需显式设计。 |
+| 路径参数 / 查询参数 / 请求体 | path parameter / query parameter / request body | 不同输入位置；业务字段一律按接口契约校验，不能以参数名代替授权。 |
+| API 契约 / OpenAPI | API contract / OpenAPI | 描述接口结构、返回和约束；生成接口文档不等于业务规则已批准或联调已通过。 |
+| 分页 / 大整数序列化 | pagination / large integer serialization | 当前基座分页上限和 Long 转字符串等传输约束应依技术契约落实，避免前端精度丢失。 |
+| 文件私有访问 | private file access | 文件默认私有与上传者访问等基座能力；跨组织附件授权、业务权限关联仍需单独实现。 |
+| 前端组件 / 组合式 API | component / Composition API | Vue 等前端组织界面的技术概念；不代表当前全部业务端已交付。 |
+| 状态管理 / 路由守卫 | state management / route guard | 前端共享状态及导航检查；隐藏菜单和拦截页面不能代替服务端鉴权。 |
+| PC 管理端 / App / 小程序 | PC console / mobile app / mini program | 承担不同用户场景的交付端；完整需求包含多端，按依赖分批推进不等于删掉后续端或交易链。 |
+| Redis / 消息中间件 | Redis / message broker | 可选扩展技术词汇；当前基座不以它们为必需依赖，不因术语表收录就加入部署前置条件。 |
+
+<a id="states"></a>
+## 十一、状态词汇与门禁
+
+### 11.1 先标维度，再选状态名
+
+以下为**语义示例，不是已批准的数据库枚举或完整状态机**。每个业务包仍需定义状态转换主体、前置条件、证据、撤销/调整、幂等和异常恢复。
+
+| 维度 | 建议表达 | 不应混同 |
+| --- | --- | --- |
+| 身份与组织 | 认证待核验、成员有效、授权撤回 | 工人在岗、项目履约中。 |
+| 招聘与履约 | 已报名、已确认参与、已到岗、已离场 | 账号启用、劳动关系建立或解除。 |
+| 考勤与计量 | 原始事件已接收、已计算、差异待处理、已确认、已调整 | 工资已批、账单已确认或已付款。 |
+| 权益与账单 | 待核算、待确认、已确认、已锁定、已调整 | 收款成功或应收全部核销。 |
+| 支付审批 | 待审批、已批准、已拒绝、批准已失效 | 机构受理或实际到账。 |
+| 支付执行 | 待提交、已受理、处理中、成功、失败、结果未知 | 部分成功应下钻明细；退款/退回用关联记录表达。 |
+| 回款与核销 | 未回款、部分回款、已核验回款、部分核销、全部核销 | 对方已提交付款凭证、平台自行标记已付。 |
+| 账期与争议 | 未到期、逾期；无已知争议、争议中、争议已处理 | “逾期”不能取代争议状态；争议处理不一定免除付款义务。 |
+| 证据与授权 | 已采集、待核验、核验范围明确；仅本组织可见、指定接收方可见 | 已采集即真实、已核验即可对外共享。 |
+| 投诉与处置 | 已受理、调查中、已认定、可申诉、复核中、处置已执行 | 投诉即违约，原处理决定永久不可复核。 |
+
+`confirmed`、`approved`、`paid`、`received`、`reconciled` 必须附对象和主体；`settled` 只有在业务包明确其含义后才能使用，不作为“核算、确认、支付、核销全完成”的通用缩写。
+
+### 11.2 四种独立交付状态
+
+| 规范术语 | 英文候选 | 必须有的判断依据 |
+| --- | --- | --- |
+| 规则已批准 | rule approved | 有权责任人对具体版本、适用主体及边界作出批准；“文档已写”不等于批准。 |
+| 开发已完成 | development complete | 约定代码、迁移、接口和测试达到交付标准；不等于机构已经真实接入。 |
+| 联调已验证 | integration verified | 标明模拟/沙箱/真实环境、参与方、版本和证据；模拟成功不能冒充真实业务验证。 |
+| 真实启用已批准 | live activation approved | 完成真实主体、合同、权限、资金和运营条件审查并获得启用授权；测试通过不自动触发。 |
+
+上述状态应分栏追踪，不压成一个“已完成”。当前实际进度应查阅需求追踪门禁、技术交接及验证证据，不从本表收录的术语数量推断。
+
+<a id="migration"></a>
+## 十二、歧义消除与历史命名迁移
+
+| 历史或易混表达 | 规范解释 / 迁移方向 |
+| --- | --- |
+| “这是劳务公司 SaaS” | 改用劳务供应链交易平台；内部管理工具是服务交易与履约的能力，不是平台责任边界。 |
+| “worker 禁用，统一 employee” | 取消该禁用；工人用 worker，明确劳动关系中的员工才用 employee。 |
+| “employer 就是用工方” | 平台采购角色优先用 labor service buyer；涉及 legal employer 时明确实际劳动关系主体。 |
+| “tenant = company = account” | 租户是技术隔离，组织是业务主体，账号是登录身份；当前组织租户映射不消除概念差异。 |
+| “job、task 都改 project” | 岗位、招聘职位、异步任务、项目分别命名；项目不是通用替换词。 |
+| “wage、payment 都改 salary” | 工资、支付动作和其他款项分别表达；支付不只包含工资，salary 也不是所有计薪方式的唯一英文。 |
+| “佣金 = 返费 = 回扣” | 按真实合同服务、付款方向、资格及利益冲突分别识别；不以词语替换规避风险。 |
+| “settled = 返费已付” | 拆分权益确认、应付形成、支付执行和核销；迁移前核对旧数据真实含义。 |
+| “审批通过是永久终态” | 识别适用版本、条件变化、授权撤回和有效期；后续撤销或重审按业务状态机处理。 |
+| “平台统一发工资” | 应明确供应商等责任主体审批，机构执行，平台编排和展示；不能暗示平台承担工资债务。 |
+| “平台统一收款才是闭环” | 保留线下对公支付及核验对账；平台服务费收款与客户资金归集必须区分。 |
+| “确权完成即可保理” | 拆成债权资料核验、债务确认、转让、通知、登记及机构审查；没有单一动作保证可融资。 |
+| “有征信档案 / 数据资产就能卖数据” | 先区分交易信用事实、征信业务边界、处理依据、接收方和用途；资源形成不等于确权、入表或可出售。 |
+| “平台管理员可查全部租户” | 监督也须通过授权对象、证据交付及审计实现；不设默认业务隔离豁免。 |
+
+历史 `EmployeeStatus`、`SalaryStatus`、`RebateStatus`、`AdvanceStatus`、`AuditStatus`、`PaymentStatus` 等名称仅作为检索线索，不在本表重新冻结旧枚举。涉及已上线或持久化字段时，应建立旧值含义、目标维度、数据迁移及接口兼容映射后再调整。
+
+<a id="examples"></a>
+## 十三、跨链理解示例
+
+1. **用工方确认服务量，不等于工资已付。** 某项目形成确认工时后，按供应商结算口径形成用工方应付，按工资口径形成供应商应付工人工资，按平台规则形成有效计费人天；三类金额和审批人分别记录，返费权益另按条件确认。
+2. **线下对公支付，也可以进入交易闭环。** 用工方提交转账材料后先记录待核验；核对收款主体、银行记录、金额和账单，再按实际到账分配并核销。部分到账不显示为全额收款，未到账不因上传截图显示为已收。
+3. **未来融资包不是债权转让。** 供应商授权平台向指定机构提供某批应收资料，平台记录来源、核验、争议和用途。机构独立尽调与决策，转让、通知、融资和回款按各自合同及证据推进；工人工资应付不自动变成融资标的。
+4. **数据质量不是对外授权。** 平台原始打卡可作为来源明确的履约数据，但定位等个人信息仍须限制用途和范围。向机构提供汇总指标时也应评估关联识别风险，不因去掉姓名就宣称匿名化。
+
+<a id="resources"></a>
+## 十四、术语资源、维护与更新记录
+
+### 14.1 项目内依据与建议阅读顺序
+
+| 资源 | 用途 / 状态解释 |
+| --- | --- |
+| [项目 README](../README.md) | 首先阅读定位和七条护栏，避免向内部 SaaS、单纯撮合或平台供人垫资漂移。 |
+| [需求基线 v0.4](01-售前阶段/需求分析/requirements-draft-v0.4.md)、[PRD v0.1](./02-开发阶段/产品设计/00-产品全景/PRD-v0.1.md) | 当前完整交易链、角色和多端需求依据。 |
+| [业务包拆解与首批实施清单](./02-开发阶段/产品设计/05-战略与实施/业务包拆解与首批实施清单-v0.1.md)、[需求追踪与交接门禁](./02-开发阶段/产品设计/05-战略与实施/需求追踪与交接门禁-v0.1.md) | 将术语落实到可决策、可开发、可验收业务包，并分别核对四类状态。 |
+| [详细技术方案](02-开发阶段/技术方案/详细技术方案.md)、[技术交接文档](02-开发阶段/技术交接/技术交接文档.md)、[后端说明](../backend/README.md) | 当前架构、基座事实、责任边界和未实现能力；不由本表创造新技术依赖。 |
+| [商业模式与收费标准](./02-开发阶段/产品设计/03-账单与资金/商业模式与收费标准-v0.1.md) | 现行收费口径的专门来源；不从未来融资规划推出现行收费。 |
+| [资金闭环与账期模型](./02-开发阶段/产品设计/03-账单与资金/资金流转闭环与账期模型分析-v0.1.md)、[资金账户与支付指令](./02-开发阶段/产品设计/03-账单与资金/资金账户与支付指令流程-v0.1.md) | 核对付款责任、线下支付、授权、机构回执及对账。 |
+| [平台审核与中立监督](./02-开发阶段/产品设计/04-治理信用与增长/平台方审核与中立监督需求-v0.1.md)、[协同供给规则建议](./02-开发阶段/产品设计/02-供给与履约/劳务公司协同供给产品流程与规则建议-v0.1.md) | 对照多方监督、协同交付及组织隔离。 |
+| [人事经理与推荐增长需求](./02-开发阶段/产品设计/04-治理信用与增长/人事经理收益与跨企业推荐增长需求-v0.1.md)、[奖励管理制度](00-项目管理/经营制度/人事经理贡献奖励与跨企业渠道推荐奖励管理制度-v1.0.md) | 理解合法增长路径及贡献核验；制度文档存在不代表每笔奖励可直接支付。 |
+| [交易信用档案与保理数据准备](./02-开发阶段/产品设计/04-治理信用与增长/交易信用档案与保理数据准备-v0.1.md) | 信用事实来源、核验、争议、可见范围和未来资料包。 |
+| [产品战略路线与可选增值渠道](./02-开发阶段/产品设计/05-战略与实施/产品战略路线与可选增值渠道-v0.1.md)、[未来支付与保理架构建议](./02-开发阶段/产品设计/05-战略与实施/未来平台支付与保理资金架构建议-v0.1.md) | 未来资源：交易数据与融资协作、应收管理、可选金融生态；均需后续独立决策和启用批准。 |
+
+### 14.2 外部权威术语资源
+
+本次核对日期为 **2026-10-24**。“已核对公开全文”仅表示阅读了下列官方站点所载文本中相关定义，不表示已完成截至该日的全部修订、配套规定及个案适用性检索。正式产品决策、合同和真实启用前仍须专业复核。
+
+| 资源 / 官方检索入口 | 对应术语 | 本次核验范围 |
+| --- | --- | --- |
+| 《中华人民共和国民法典》：最高人民法院公开全文，页面定位 `court.gov.cn/zixun/xiangqing/233181.html` | 债权转让通知、抗辩和抵销；保理合同、有/无追索权、多重保理 | 已核对第546、548、549条及第761—769条相关内容；不把法律定义当成平台已具备业务资格。 |
+| 《中华人民共和国个人信息保护法》：国家网信办公开全文，页面定位 `cac.gov.cn/2021-08/20/c_1631050028355286.htm` | 个人信息、敏感个人信息、处理依据、最小必要、删除、去标识化、匿名化 | 已核对第4、6、13、28、47、73条相关内容；业务落地还需核对具体处理场景。 |
+| 《动产和权利担保统一登记办法》及动产融资统一登记公示系统：人民银行、人民银行征信中心官方入口 | 应收账款相关登记、公示与查询 | 资源线索，具体条文及操作规则待专题复核；本次不据此给出登记效力或优先顺位结论。 |
+| 《征信业管理条例》《征信业务管理办法》：国务院、人民银行官方入口 | 信用信息、征信业务、授权与对外提供边界 | 资源线索，拟开展机构信用数据服务前专题复核；不是认定本平台已开展或可以开展征信业务。 |
+| 《中华人民共和国劳动合同法》及劳务派遣、人力资源服务相关规定：全国人大、国务院、人社部门官方入口 | 用人单位、劳务派遣、招聘服务与业务准入 | 资源线索，按真实合同与经营模式复核；不以平台标签替代业务性质判断。 |
+| 《中华人民共和国数据安全法》、数据资源会计处理相关规定：全国人大、财政部官方入口 | 数据安全、数据资源与资产会计处理 | 资源线索，数据产品及资产化讨论前复核；本表不认定数据所有权、交易权或资产入表条件。 |
+
+外部法律术语有专门含义时应保留其原有边界；英文为工作译名而非法律文本的权威译本。未核验的机构产品、行业缩写、费率与登记操作规则不得从互联网营销材料直接升级为平台规则。
+
+### 14.3 术语新增与变更流程
+
+1. 提出中文规范名、英文候选、适用范围、主体、边界、来源及易混词。
+2. 业务负责人确认真实语义；涉及资金、劳动关系、数据、奖励或金融时，由相应专业责任人复核，不仅由技术负责人单独决定。
+3. 识别是否改变需求、合同、接口、数据字典或历史状态；必要时形成独立决策和迁移方案。
+4. 同步本表、关联业务包及契约，分别记录规则批准、开发、联调与启用状态。
+5. 持续保留别名和历史检索映射；不为了统一术语扩大平台责任或删去合法增长路径。
+
+### 14.4 更新记录
+
+| 日期 | 版本 | 更新说明 |
+| --- | --- | --- |
+| 2026-10-17 | v1.0 | 初始业务及开发术语整理，保留为历史来源。 |
+| 2026-10-20 | v1.1 / v1.2 | 补充平台交易、履约及计费相关词汇；旧表仍存在 SaaS 和通用状态命名混用。 |
+| 2026-10-24 | v2.0 | 按劳务供应链交易基础设施方向重构，新增未来保理、数据支撑及权威资料索引；纠正角色、返费方向、工资/支付和确认/核销混用，区分当前范围、未来资源与四类交付状态。 |

@@ -9,7 +9,7 @@
 - [web-admin/](web-admin/README.md)：Web 管理端预留目录。
 - [mobile-app/](mobile-app/README.md)：独立移动 App 预留目录。
 - [mini-program/](mini-program/README.md)：微信小程序预留目录。
-- 必须先对齐 [当前 PRD](../docs/02-开发阶段/产品设计/PRD-v0.1.md)，经技术评审确定工程与依赖版本，再提供可复现的安装、构建和测试步骤。
+- 必须先对齐 [当前 PRD](../docs/02-开发阶段/产品设计/00-产品全景/PRD-v0.1.md)，经技术评审确定工程与依赖版本，再提供可复现的安装、构建和测试步骤。
 - 跨端共识引用权威需求文档，接口遵守后端认证、错误码与组织上下文契约。
 
 ## 禁止事项

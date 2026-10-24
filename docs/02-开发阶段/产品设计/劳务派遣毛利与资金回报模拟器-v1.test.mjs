@@ -54,7 +54,7 @@ test("standalone page renders all three ledgers and stays consistent with the ca
   assert.equal(monthlyHeaders[5], "固定运营费用（元/月）");
   assert.equal(monthlyHeaders[9], "经营现金流");
   assert.equal(element("hiringChannelCostPerWorkerHour").value, "1.5");
-  assert.equal(element("platformFeePerPersonDay").value, "2");
+  assert.equal(element("platformFeePerPersonDay").value, "1");
   const assertRendered = () => {
     assert.equal(element("errorMessage").textContent, "");
     for (const id of ["businessRows", "monthlyComparisonRows", "annualComparisonRows", "capitalComparisonRows"]) {
@@ -95,7 +95,7 @@ test("standalone page renders all three ledgers and stays consistent with the ca
   element("resetButton").handlers.click();
   assert.equal(element("monthlyFixedCost").value, "60000");
   assert.equal(element("hiringChannelCostPerWorkerHour").value, "1.5");
-  assert.equal(element("platformFeePerPersonDay").value, "2");
+  assert.equal(element("platformFeePerPersonDay").value, "1");
   assertRendered();
   const snapshot = () => [...elements.values()].map((item) => item.innerHTML + item.textContent).join("\n");
   const baseline = snapshot();
