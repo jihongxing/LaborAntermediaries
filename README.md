@@ -49,7 +49,6 @@
 | [infrastructure/](infrastructure/README.md) | 部署设施预留目录与安全约定，尚无完整部署实现。 |
 | [.github/](.github/README.md) | 协作模板和 CI/CD 工作流。 |
 | [.gstack/](.gstack/README.md) | 本地浏览器工具产物；除说明外不提交。 |
-| [logs/](logs/README.md) | 从仓库根目录运行时产生的本地日志；除说明外不提交。 |
 | [tools/](tools/README.md) | 辅助工具、预留工具目录与运行边界。 |
 
 各目录 README 说明用途、维护约定和禁止事项；修改前同时遵守根目录工程与文档治理规范。`.git/` 是 Git 内部数据，不添加项目说明或手工修改。`backend/target/` 是可清理重建的 Maven 产物，不放置需长期维护的文件，其约定见后端 README。
@@ -62,6 +61,14 @@
 git clone https://github.com/jihongxing/LaborAntermediaries.git
 cd LaborAntermediaries/backend
 mvn test
+mvn spring-boot:run '-Dspring-boot.run.profiles=local'
 ```
 
 后端环境与启动条件参见 [backend/README.md](backend/README.md)。前端各目录当前不一定具备可执行工程，请勿将规划中的技术栈或功能清单当作已上线能力。
+
+后端启动和测试命令统一在 `backend/` 目录执行，默认日志写入 `backend/logs/`。如必须从仓库根目录启动，应显式指定日志目录：
+
+```powershell
+$env:LOG_PATH = 'backend/logs'
+mvn -f backend/pom.xml spring-boot:run '-Dspring-boot.run.profiles=local'
+```

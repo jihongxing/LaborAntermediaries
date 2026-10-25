@@ -147,6 +147,13 @@ docker compose up -d
 mvn spring-boot:run '-Dspring-boot.run.profiles=local'
 ```
 
+以上命令在 `backend/` 目录执行，日志默认写入 `backend/logs/`。如必须从仓库根目录启动，需显式指定日志目录：
+
+```powershell
+$env:LOG_PATH = 'backend/logs'
+mvn -f backend/pom.xml spring-boot:run '-Dspring-boot.run.profiles=local'
+```
+
 默认数据库为 `jdbc:postgresql://localhost:5432/labor_db`，用户为 `labor`；可用 `DB_URL`、`DB_USERNAME`、`DB_PASSWORD` 覆盖。数据库密码没有默认值。Flyway 首次启动创建技术表，不创建业务表。
 
 - API 前缀：`/api`；匿名健康检查：`GET /api/actuator/health`。
@@ -236,6 +243,8 @@ foundation:
 - 普通异常/数据库回滚会清理文件；进程硬崩溃在移动文件与数据库提交之间可能留下孤儿文件，磁盘故障也可能破坏清理。当前不自动扫描删除，需运维核对元数据后清理。数据库与文件必须协调备份恢复。
 
 ## 4. 测试与 CI
+
+以下测试命令均在 `backend/` 目录执行：
 
 ```powershell
 mvn test

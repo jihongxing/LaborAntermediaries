@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <!-- 日志文件路径 -->
-    <property name="LOG_PATH" value="logs"/>
+    <!-- 默认相对于 backend/ 工作目录；从其他目录启动必须显式设置 LOG_PATH -->
+    <property name="LOG_PATH" value="${LOG_PATH:-logs}"/>
     <!-- 日志文件名 -->
     <property name="LOG_FILE" value="labor"/>
 

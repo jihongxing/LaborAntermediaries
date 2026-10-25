@@ -2,7 +2,7 @@
 
 ## 用途
 
-存放在 `backend/` 工作目录运行应用时产生的日志。日志配置由 `src/main/resources/logback-spring.xml` 维护。
+这是后端唯一的本地日志目录。后端命令统一在 `backend/` 工作目录执行，日志配置由 `src/main/resources/logback-spring.xml` 维护。
 
 ## 必须遵守
 
@@ -14,4 +14,4 @@
 - 禁止输出令牌、密钥、密码、完整个人信息和敏感业务正文。
 - 禁止以此代替持久化审计记录，或保存源码、正式交付资料及数据库备份。
 
-相关入口：[后端说明](../README.md)、[根目录日志约定](../../logs/README.md)。
+相关入口：[后端说明](../README.md)。如果必须从仓库根目录启动，需通过 `LOG_PATH=backend/logs` 显式指定本目录。

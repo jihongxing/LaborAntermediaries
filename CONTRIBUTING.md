@@ -142,7 +142,9 @@ git checkout -b hotfix/fix-description
 # ...
 
 # 运行测试
+cd backend
 mvn test  # 后端
+cd ..
 npm test  # 前端
 
 # 提交代码（遵循提交规范）

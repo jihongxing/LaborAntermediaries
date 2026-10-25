@@ -169,12 +169,10 @@ backup/
 # 日志文件
 # ============================================
 
-logs/
-!logs/
-logs/*
-!logs/README.md
-!backend/logs/
-backend/logs/*
+# 后端本地日志目录（仅保留说明）
+/backend/logs/
+!/backend/logs/
+/backend/logs/*
 !backend/logs/README.md
 *.log
 npm-debug.log*

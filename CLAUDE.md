@@ -363,6 +363,8 @@ public class EmployeeServiceImpl implements EmployeeService {
 
 ### 如何检查是否遵守规范
 
+以下后端命令在 `backend/` 目录执行。
+
 ```bash
 # 1. 运行CheckStyle检查
 mvn checkstyle:check

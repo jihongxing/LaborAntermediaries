@@ -51,6 +51,8 @@
 
 ## ✅ 开发后（必查3项）
 
+以下后端命令在 `backend/` 目录执行。
+
 ```bash
 # 1. CheckStyle检查
 mvn checkstyle:check
