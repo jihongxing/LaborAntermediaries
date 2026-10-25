@@ -2,7 +2,7 @@
 
 ## 用途
 
-- `main/java/`：应用入口、`common` 公共契约与工具、`foundation` 非业务基础能力。
+- `main/java/`：应用入口、`common` 公共契约与工具、`foundation` 基础能力，以及按业务职责归位的 `modules/identity`、`modules/demand`、`modules/bidding` 首批纵向切片。
 - `main/resources/`：应用配置、日志配置、Flyway 数据库迁移。
 - `test/java/`：单元测试、Web 基础能力测试和 PostgreSQL 集成测试。
 

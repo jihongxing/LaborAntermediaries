@@ -1,0 +1,22 @@
+name: labor-backend-test
+
+services:
+  postgres-test:
+    image: postgres:16
+    container_name: labor-backend-postgres-test
+    environment:
+      POSTGRES_DB: labor_foundation_test
+      POSTGRES_USER: labor_test
+      POSTGRES_PASSWORD: ${TEST_DATABASE_PASSWORD:?Set TEST_DATABASE_PASSWORD before starting PostgreSQL test}
+    ports:
+      - "127.0.0.1:55444:5432"
+    volumes:
+      - postgres-test-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U labor_test -d labor_foundation_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres-test-data:

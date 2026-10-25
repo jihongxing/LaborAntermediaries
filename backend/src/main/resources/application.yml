@@ -55,6 +55,21 @@ springdoc:
   swagger-ui:
     enabled: false
 foundation:
+  # 业务表必须声明组织隔离；组织以自身 id 作为租户，跨组织读取只能走投递快照。
+  tenant-tables:
+    - business_organization
+    - business_organization_revision
+    - business_membership
+    - business_membership_request
+    - business_demand
+    - business_demand_revision
+    - business_review_decision
+    - business_demand_delivery
+    - business_bid
+    - business_bid_revision
+    - business_bid_award
+    - business_bp05_snapshot
+    - business_bid_supervision_event
   security:
     public-key: ${JWT_PUBLIC_KEY:}
     issuer: ${JWT_ISSUER:labor-identity}

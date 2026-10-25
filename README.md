@@ -1,6 +1,6 @@
 # 劳务供应链交易平台
 
-连接用工方与合规劳务供应商，围绕真实用工需求、应标选标、人员供给、履约确认和结算对账建立可追溯的交易与协作网络。项目当前处于需求整理与产品设计阶段；原有的劳务中介管理 SaaS 能力和代码是建设基础，不代表交易平台全链路已实现。
+连接用工方与合规劳务供应商，围绕真实用工需求、应标选标、人员供给、履约确认和结算对账建立可追溯的交易与协作网络。项目已通过首批实现准入评审，进入 BP-01～BP-03 的首批实现阶段；当前纵向切片覆盖组织加入、组织审核、需求补正/审核和发布，尚不代表交易平台全链路或外部依赖已实现。
 
 ## 产品定位与边界
 
@@ -43,7 +43,7 @@
 | 目录 | 内容 |
 | --- | --- |
 | [backend/](backend/README.md) | 非业务后端底座、源码、测试与接入约束。 |
-| [frontend/](frontend/README.md) | Web、独立 App、小程序的规划与工程约定；尚未形成可运行应用。 |
+| [frontend/](frontend/README.md) | Web 管理端首批纵向切片，以及独立 App、小程序的规划与工程约定。 |
 | [database/](database/README.md) | 数据库设计参考与预留目录；实际迁移以 backend 内的 Flyway 脚本为准。 |
 | [docs/](docs/README.md) | 当前需求、设计、制度与历史资料索引。 |
 | [infrastructure/](infrastructure/README.md) | 部署设施预留目录与安全约定，尚无完整部署实现。 |
@@ -64,7 +64,7 @@ mvn test
 mvn spring-boot:run '-Dspring-boot.run.profiles=local'
 ```
 
-后端环境与启动条件参见 [backend/README.md](backend/README.md)。前端各目录当前不一定具备可执行工程，请勿将规划中的技术栈或功能清单当作已上线能力。
+后端环境与启动条件参见 [backend/README.md](backend/README.md)。Web 管理端的安装、启动和验证步骤参见 [frontend/web-admin/README.md](frontend/web-admin/README.md)；移动 App 与小程序仍按各自 README 的规划边界处理，不能将规划中的功能清单当作已上线能力。
 
 后端启动和测试命令统一在 `backend/` 目录执行，默认日志写入 `backend/logs/`。如必须从仓库根目录启动，应显式指定日志目录：
 

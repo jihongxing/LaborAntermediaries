@@ -1,255 +1,63 @@
-# Web管理后台
+# 劳务供需平台 Web
 
-劳务供应链交易平台的 Web 管理端预留目录。
+面向访客、组织成员和平台岗位的 Web 入口，使用 Vue 3、TypeScript、Vue Router、Vite、Element Plus 和 Axios。
+根路径 `/` 是公开门户；本地开发预览另提供匿名需求详情、未认证账号状态和用工方/供应商组织空间。
 
-## 用途、约定与禁止事项
+## 运行边界
 
-- **现状**：只有 README、ESLint 与 Prettier 配置，无 `package.json` 和应用源码；技术栈版本与运行命令为历史规划参考，新增文件遵循下方目录规划。
-- **用途**：承载经批准的 Web 操作与管理界面，具体角色和范围以当前 PRD 为准。
-- **必须遵守**：工程初始化先评审依赖与工具链，补齐锁文件、环境示例、测试及 CI；复用后端接口契约，对敏感字段和导出进行授权设计。
-- **禁止**：不得依赖页面隐藏实现权限隔离，不得把数据库凭据或签名私钥放入浏览器，不得将尚未实现的页面或支付能力标为可用。
+- 后端是资源服务器，不在本项目签发 JWT；真实账号登录和组织状态需要外部身份服务及服务端认证接口接入。
+- JWT 和当前组织编号只保存在页面内存，刷新页面后清空；前端界面隐藏不能代替后端权限校验。
+- “账号注册”属于外部身份服务；本工作台从“组织申请/加入”开始接入首批业务。
+- 供应商开放需求只来自后端按租户生成的投递快照，页面不直接请求其他组织的需求源数据。
+- 公共门户中的需求是本地开发预览用的合成样例，生产构建不包含该样例；当前后端没有公共需求授权、匿名投影或公开查询 API，未接入前不得对外展示业务需求。
+- `/account`、`/workspace/employer` 和 `/workspace/supplier` 仅在 Vite 开发模式注册，用于评审页面结构；它们当前使用演示状态/数据，不代表真实登录、组织资格或业务处理已接通。
+- `/__dev/console` 是仅开发模式可用的 API 联调入口，不会出现在公开导航，也不会编入生产构建。
 
-共同约定：[前端总入口](../README.md)。
+## 安装与启动
 
-## 📋 技术栈
+在本目录执行：
 
-- **框架**：Vue 3.3+
-- **构建工具**：Vite 4.x
-- **语言**：TypeScript 5.x
-- **UI组件库**：Element Plus 2.x
-- **状态管理**：Pinia 2.x
-- **路由**：Vue Router 4.x
-- **HTTP客户端**：Axios
-
-## 目录规划与新增文件规则
-
-以下为目标放置模板，不代表目录或功能已实现；只在获批需求需要时创建。`<module>` 使用明确的小写英文业务名称，不按页面或数据库表机械划分模块。
-
-```text
-web-admin/
-├── public/                    原样发布的公开资源，不存敏感文件
-├── src/
-│   ├── app/                   应用装配，不承载业务规则
-│   │   ├── router/            路由汇总、导航守卫
-│   │   ├── layouts/           应用布局
-│   │   └── plugins/           全局插件注册，按需新增
-│   ├── modules/
-│   │   └── <module>/
-│   │       ├── pages/         业务页面
-│   │       ├── components/    业务专属 UI
-│   │       ├── api/           业务请求及传输模型
-│   │       ├── model/         业务状态、展示模型与纯规则
-│   │       ├── composables/   业务组合逻辑，按需新增
-│   │       ├── assets/        业务专属资源，按需新增
-│   │       ├── routes.ts      本模块路由声明，按需新增
-│   │       └── index.ts       必要的模块公开入口，按需新增
-│   ├── platform/
-│   │   ├── http/              请求、错误转换等基础能力
-│   │   ├── session/           会话与令牌生命周期，不放业务角色规则
-│   │   └── storage/           浏览器存储封装，按需新增
-│   ├── shared/
-│   │   ├── ui/                无业务归属的复用 UI
-│   │   ├── lib/               纯工具与通用组合函数
-│   │   └── styles/            主题与全局样式
-│   ├── assets/                全应用共用、参与构建的图片与字体
-│   ├── App.vue
-│   └── main.ts
-├── tests/
-│   ├── e2e/                   跨页面端到端场景，按需新增
-│   └── fixtures/              跨测试共用的合成数据，按需新增
-├── .env.example               可公开的配置项示例，不放真实令牌
-├── package.json / 锁文件       初始化时确定包管理器并提交对应锁文件
-├── tsconfig.json / vite.config.ts
-└── README.md
-```
-
-### 放置与依赖规则
-
-- 新增业务页面、业务状态和请求放入同一个 `modules/<module>`；页面局部样式和只使用一次的 UI 留在页面附近，不为每个小文件预建目录。
-- `api` 处理业务端点与传输转换，复用 `platform/http`；页面不重复实现鉴权头、错误转换和重试。业务校验留在业务模块，通用字符串校验才考虑 `shared/lib`。
-- `app` 汇总模块路由并装配依赖；模块不反向依赖 `app`。`shared` 不依赖业务模块或 `platform`；需要平台行为的公共 UI 通过参数、事件或注入接口获取。
-- `platform` 不直接引用业务模块；业务模块之间只通过明确的公开入口协作，不深层导入其他模块的页面、内部状态或请求实现。禁止把所有业务状态收进一个全局 Store。
-- 单元测试和 UI 测试使用相邻的 `*.spec.ts`；跨页面流程放 `tests/e2e/`。测试框架及运行命令在工程初始化时确认，不把此目录规划当作已有测试能力。
-- 出现独立子职责时再拆业务子目录；公共提取、跨端复用和 README 更新遵循[前端共同规则](../README.md#目录规划与新增文件规则)。构建目录 `dist/` 与依赖目录 `node_modules/` 不存放手工维护资料。
-
-### 放置示例
-
-以下仅表示未来获批需求的位置，不创建功能：
-
-| 新增内容 | 位置 |
-|---|---|
-| 招聘列表页面及专属筛选 UI | `src/modules/recruitment/pages/`、`src/modules/recruitment/components/` |
-| 招聘请求与列表状态 | `src/modules/recruitment/api/`、`src/modules/recruitment/model/` |
-| 不含业务规则的通用分页 UI | 确认真实复用后放 `src/shared/ui/` |
-| 统一 HTTP 错误转换 | `src/platform/http/`，不放 `shared/lib` |
-| 招聘请求单元测试 | 与被测文件相邻的 `*.spec.ts` |
-| 导航到详情页的端到端流程 | `tests/e2e/recruitment/` |
-
-## 🚀 快速开始
-
-### 安装依赖
-
-```bash
+```powershell
 npm install
-# 或
-pnpm install
-```
-
-### 开发模式
-
-```bash
 npm run dev
 ```
 
-访问：http://localhost:3000
+Web 管理端固定监听 `127.0.0.1:3000`，开发服务器严格使用此端口，不会自动递增到 3001、3002 等端口。若端口被占用，先检查监听 PID 的完整命令行：确认属于本目录的旧 Vite 服务后再停止并重启；若属于其他项目或无法确认归属，不要终止进程或改用新端口，应报告冲突。项目开发时只保留一个 Web 管理端服务。
 
-### 构建生产版本
+从仓库根目录启动并自动处理本项目旧服务：
 
-```bash
-npm run build
+```powershell
+.\tools\start-web-admin.ps1
 ```
 
-### 预览生产构建
+脚本只会停止命令行明确指向本项目 `frontend/web-admin` 的旧 Vite 服务；端口被其他进程占用时会直接失败。
 
-```bash
-npm run preview
-```
+开发服务器将 `/api` 代理到 `http://localhost:8080`；可通过 `.env.local` 的 `VITE_DEV_API_TARGET` 覆盖。
 
-### 代码检查
+API 基地址可通过 `VITE_API_BASE_URL` 配置，默认是同源 `/api`。公开配置示例见 [.env.example](.env.example)，不要把真实令牌写入 `.env` 或源码。
 
-```bash
-# Lint
-npm run lint
+## 验证
 
-# 类型检查
+```powershell
 npm run type-check
+npm run build
+npm run lint
 ```
 
-## 🔧 环境配置
+`@playwright/test` 已作为开发依赖安装。浏览器检查使用仓库 `/playwright` 技能提供的 CLI 流程；需要编写端到端用例时再新增 `tests/e2e/` 和对应 `playwright.config.ts`，不要把令牌或真实业务数据写入测试夹具。
 
-### 开发环境 (.env.development)
+## 页面与接口对应
 
-```env
-# API基础URL
-VITE_API_BASE_URL=http://localhost:8080/api
+门户披露字段和页面分层见[劳务供需门户与 Web 角色入口原型](../../docs/02-开发阶段/产品设计/00-产品全景/劳务供需门户与Web角色入口原型-v0.1.md)及[需求公开可见性标准](../../docs/02-开发阶段/产品设计/01-身份与需求交易/用工方入驻与有效需求标准-v0.1.md#741-公共门户与需求分阶段披露新增建议待业务规则评审)。
 
-# 应用标题
-VITE_APP_TITLE=劳务中介管理系统
-```
+| 页面区域 | 主要接口 |
+| --- | --- |
+| 组织入驻 | `POST/GET/PUT /api/organizations`、`POST /submit` |
+| 组织加入 | `POST /api/organizations/{id}/join`、`GET/POST /membership-requests` |
+| 平台组织审核 | `GET /api/organizations/platform/pending`、`POST /api/organizations/platform/{id}/review` |
+| 需求管理 | `POST/GET /api/demands/organizations/{id}`、`PUT /revisions/{revision}`、`POST /submit`、`POST /publish` |
+| 平台需求审核 | `GET /api/demands/platform/pending`、`POST /api/demands/platform/{id}/review` |
+| 开放需求 | `GET /api/demands/open-for-bid` |
+| BP-04 应标/选标/确认 | `/api/bidding/demands/{id}/bids`、`/awards`、`/confirmation`、`/snapshots` |
 
-### 生产环境 (.env.production)
-
-```env
-# API基础URL
-VITE_API_BASE_URL=https://api.example.com/api
-
-# 应用标题
-VITE_APP_TITLE=劳务中介管理系统
-```
-
-## 📝 开发规范
-
-### 组件命名
-
-```vue
-<!-- ✅ 正确：大驼峰 -->
-<script setup lang="ts">
-// EmployeeList.vue
-</script>
-
-<!-- ❌ 错误：小写或下划线 -->
-<!-- employee-list.vue -->
-<!-- employee_list.vue -->
-```
-
-### API调用
-
-位置示例：`src/modules/employee/api/employee.ts`。以下仅演示模块归属，`@` 别名、请求封装及返回类型须在初始化时落地并对齐后端契约，不是当前可执行代码。
-
-```typescript
-import request from '@/platform/http/request'
-
-export interface Employee {
-  id: number
-  name: string
-  // ...
-}
-
-export const getEmployeeList = (params: any) => {
-  return request<Employee[]>({
-    url: '/employees',
-    method: 'get',
-    params
-  })
-}
-
-export const getEmployeeById = (id: number) => {
-  return request<Employee>({
-    url: `/employees/${id}`,
-    method: 'get'
-  })
-}
-```
-
-### 页面组件
-
-```vue
-<template>
-  <div class="employee-list">
-    <el-table :data="tableData" v-loading="loading">
-      <el-table-column prop="name" label="姓名" />
-      <!-- ... -->
-    </el-table>
-  </div>
-</template>
-
-<script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { getEmployeeList } from '@/modules/employee/api/employee'
-import type { Employee } from '@/modules/employee/api/employee'
-
-const tableData = ref<Employee[]>([])
-const loading = ref(false)
-
-const fetchData = async () => {
-  loading.value = true
-  try {
-    const res = await getEmployeeList({ page: 1, size: 20 })
-    tableData.value = res.data
-  } finally {
-    loading.value = false
-  }
-}
-
-onMounted(() => {
-  fetchData()
-})
-</script>
-
-<style scoped>
-.employee-list {
-  padding: 20px;
-}
-</style>
-```
-
-## 🧪 测试
-
-```bash
-# 运行单元测试
-npm run test:unit
-
-# 生成测试覆盖率报告
-npm run test:coverage
-```
-
-## 📚 相关文档
-
-- [Vue 3官方文档](https://cn.vuejs.org/)
-- [Element Plus文档](https://element-plus.org/)
-- [Vite文档](https://cn.vitejs.dev/)
-- [技术规范](../../CLAUDE.md)
-
-## 🤝 贡献
-
-请参考 [贡献指南](../../CONTRIBUTING.md)
+接口响应使用后端统一 `Result<T>`；失败时显示 `message` 和可用的 `requestId`，不在浏览器端伪造权限或错误状态。

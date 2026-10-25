@@ -1,6 +1,6 @@
 # 劳务供应链通用后端底座
 
-本目录只实现非业务基础能力。采用 Java 17、Spring Boot、MyBatis Plus、PostgreSQL、Flyway 的模块化单体；不包含招聘、履约、结算、支付等业务闭环，不要求 Redis 或消息中间件。
+本目录采用 Java 17、Spring Boot、MyBatis Plus、PostgreSQL、Flyway 的模块化单体；通用底座与已放行的首批业务纵向切片并存。当前已实现身份上下文、组织入驻/成员、用工需求审核发布及 BP-04 应标/选标/确认交接切片；不包含履约、结算或支付闭环，不要求 Redis 或消息中间件。
 
 设计边界与验收依据：[通用后端底座建设方案](../docs/02-开发阶段/技术方案/通用后端底座建设方案-v1.md)。
 
@@ -24,7 +24,7 @@ record 组件通过类型 JavaDoc 的 `@param` 说明；不逐行翻译代码，
 - [logs/](logs/README.md)：本地运行日志，除说明外不提交。
 - [docs/](docs/supply-chain-foundation.md)：后端能力契约与接入说明；产品需求和全项目技术方案仍归仓库根 `docs/`。
 - `target/`：Maven 构建、测试与覆盖率产物，由构建工具生成并忽略；`mvn clean` 会删除它，不在其中维护 README 或任何唯一资料。
-- `pom.xml`、`checkstyle.xml`、`compose.yml` 分别维护依赖与验证、代码风格、本地依赖环境；变更应同步说明和测试。
+- `pom.xml`、`checkstyle.xml`、`compose.yml`、`compose.test.yml` 分别维护依赖与验证、代码风格、本地开发数据库和隔离测试数据库；变更应同步说明和测试。
 - 必须保持组织隔离、权限校验、审计和错误契约；基础能力与业务规则分离，业务接入遵守下文准入要求。
 
 ### 目录规划原则
@@ -39,7 +39,7 @@ Java 包根统一为 `com.company.labor`，**先按能力或业务模块归类�
 
 ```text
 backend/
-├── pom.xml / checkstyle.xml / compose.yml
+├── pom.xml / checkstyle.xml / compose.yml / compose.test.yml
 ├── src/
 │   ├── main/
 │   │   ├── java/com/company/labor/
@@ -79,6 +79,8 @@ backend/
 ├── logs/                                 本地日志，不存放源码或唯一资料
 └── target/                               自动生成的构建产物
 ```
+
+当前已落地的首批业务模块为 `modules/identity`（组织、成员和审核）、`modules/demand`（需求版本、审核、按租户投递、发布和暂停/关闭）与 `modules/bidding`（应标版本、独立选标、绝对配额、供应商确认、监督证据和 BP-05 快照交接）。它们只依赖 `foundation`/`common`，不把账号注册、JWT 签发、外部资质核验或真实收费伪装成本地实现；供应商读取使用发布时生成的目标租户投递快照，不跨租户查询需求源表。比例配额因需求版本尚未承载取整/余数合同而明确拒绝。
 
 | 位置 | 应当放置 | 不应放置 |
 |---|---|---|
@@ -138,14 +140,34 @@ backend/
 
 ## 1. 本地启动
 
-需要 JDK 17、Maven、PostgreSQL 16；也可使用本目录的 Compose 启动数据库。以下是 PowerShell 示例，密码应自行生成并通过环境注入：
+需要 JDK 17、Maven、PostgreSQL 16；也可使用本目录的 Compose 或 Podman Compose 启动数据库。以下是 PowerShell 示例，密码应自行生成并通过环境注入：
 
 ```powershell
 $env:JAVA_HOME = '你的 JDK 17 目录'
 $env:DB_PASSWORD = '自行生成的本地数据库密码'
-docker compose up -d
+podman compose -f compose.yml up -d
 mvn spring-boot:run '-Dspring-boot.run.profiles=local'
 ```
+
+开发数据库使用 `compose.yml` 的 `labor_db`，不要把它用于集成测试。测试数据库使用单独的 Compose 文件、容器、卷、数据库和端口：
+
+```powershell
+$env:TEST_DATABASE_PASSWORD = '临时生成的测试数据库密码'
+podman compose -f compose.test.yml up -d
+podman compose -f compose.test.yml ps
+$env:TEST_DATABASE_URL = 'jdbc:postgresql://localhost:55444/labor_foundation_test'
+$env:TEST_DATABASE_USERNAME = 'labor_test'
+mvn -Pintegration clean verify
+```
+
+测试结束后停止容器；测试会清空该 `_test` 数据库中的技术表和业务测试表，禁止把 `TEST_DATABASE_URL` 指向开发或生产数据库：
+
+```powershell
+$env:TEST_DATABASE_PASSWORD = '首次启动时设置的同一测试密码'
+podman compose -f compose.test.yml down
+```
+
+命名卷会保留测试数据和初始化密码；后续任何 Compose 操作都先设置同一 `TEST_DATABASE_PASSWORD`。只有需要重建空测试库时才使用 `podman compose -f compose.test.yml down -v`。
 
 以上命令在 `backend/` 目录执行，日志默认写入 `backend/logs/`。如必须从仓库根目录启动，需显式指定日志目录：
 
@@ -164,7 +186,7 @@ mvn -f backend/pom.xml spring-boot:run '-Dspring-boot.run.profiles=local'
 
 ## 2. 认证与安全配置
 
-本工程是资源服务器，验证外部可信身份服务签发的 **RS256 JWT**，不签发令牌、不提供登录或组织成员管理。
+本工程是资源服务器，验证外部可信身份服务签发的 **RS256 JWT**，不签发令牌、不提供账号登录；首批业务模块提供组织成员关系和需求门禁，账号注册、联系方式验证及令牌签发仍由外部身份服务负责。
 
 | 环境变量 / 配置 | 要求 |
 |---|---|
@@ -258,15 +280,13 @@ mvn -Pintegration clean verify
 
 CI 使用 Java 17 + PostgreSQL 16，执行 Checkstyle、全部单元测试、打包、Failsafe 集成测试和 JaCoCo 报告，失败不跳过。报告在 `target/surefire-reports`、`target/failsafe-reports`、`target/site/jacoco/index.html`。覆盖率统计全部项目类，不对第三方 SQL 解析器做字节码插桩；Maven `verify` 强制检查全后端 **LINE ≥80%**，未排除低覆盖类。仅运行 `mvn test` 不执行完整集成与覆盖门禁。
 
-2026-10-25 本机以 Java 17 + 独立隔离 PostgreSQL 16.4 测试库执行 `mvn -B -ntp -Pintegration clean verify` 成功：
-170 项单元测试 + 25 项集成测试全部通过，失败/错误/跳过均为 0；Checkstyle 0 违规。
-单次 clean 构建的全后端行覆盖 **88.76%（1334/1503）**，分支覆盖 **79.29%（735/927）**，未降低校验强度。
-包含资源级跨组织授权、版本并发与历史保留、同事务回滚、任务投递，以及高精度计价、动态比例分配、
-尾差守恒和 PostgreSQL 精度存储验证。远端 CI 未在本轮触发。
+2026-10-25 本机验证记录：Podman 隔离测试数据库通过 `compose.test.yml` 提供；在 `labor_foundation_test` 上执行
+`mvn -Pintegration clean verify`，Flyway V1～V7 迁移、170 项单元测试、44 项集成测试（其中 BP-04 为 16 项）和 JaCoCo 门禁全部通过，Checkstyle 为 0 违规。
+不带 `-Pintegration` 的 `mvn clean verify` 不执行 `*IT`，当前覆盖率约 51% 并按门禁失败；它不能替代完整命令。
 
 ### 业务开发准入
 
-当前满足通用底座的开发准入：完整验证通过、行覆盖门禁达标、真实数据库隔离与可靠执行测试通过、接入契约和边界已记录。**可以开始业务模块开发，不代表生产上线批准。**
+通用底座已经完成独立的开发准入验证；本轮首批业务切片已按业务包清单放行，BP-04 已在独立 `_test` PostgreSQL 上完成局部联调验证。新迁移和业务集成测试必须在独立 `_test` PostgreSQL 上重新验证后，才能把后续切片标记为联调通过。**可以开始业务模块开发，不代表生产上线批准。**
 
 新增模块必须按第 3 节落实可信身份与成员关系、具体权限/资源 ACL、隔离表注册、任务实时授权与幂等，并提供迁移及回归测试。后续每次交付均应执行完整命令，不能用定向测试或单元测试成功替代准入验证。
 

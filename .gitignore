@@ -198,6 +198,7 @@ coverage/
 *.lcov
 .nyc_output/
 test-results/
+/frontend/web-admin/.playwright-cli/
 junit.xml
 
 # ============================================
