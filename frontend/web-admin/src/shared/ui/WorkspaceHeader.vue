@@ -6,6 +6,7 @@ defineProps<{
   organizationId: string
   organizationName: string
   loading: boolean
+  development?: boolean
 }>()
 const emit = defineEmits<{
   'update:token': [value: string]
@@ -35,7 +36,7 @@ bg
 @click="emit('clear')">清除会话</el-button>
     </div>
   </header>
-  <form class="session-bar" @submit.prevent="emit('refresh')">
+    <form v-if="development" class="session-bar" @submit.prevent="emit('refresh')">
     <el-input
       :model-value="token"
       type="password"

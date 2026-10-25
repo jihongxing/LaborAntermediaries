@@ -5,12 +5,12 @@
 
 ## 运行边界
 
-- 后端是资源服务器，不在本项目签发 JWT；真实账号登录和组织状态需要外部身份服务及服务端认证接口接入。
-- JWT 和当前组织编号只保存在页面内存，刷新页面后清空；前端界面隐藏不能代替后端权限校验。
-- “账号注册”属于外部身份服务；本工作台从“组织申请/加入”开始接入首批业务。
+- 后端在 `AUTH_ENABLED=true` 时提供手机号认证、Mock SMS、RS256 Access Token 和 Refresh Cookie；真实短信和真实微信适配器尚未接入。
+- Access Token 和当前组织编号只保存在页面内存；Refresh Token 使用 HttpOnly Cookie，前端界面隐藏不能代替后端权限校验。
+- `/login`、`/register`、`/password-recovery`、`/account` 和 `/workspace/:organizationId` 是真实认证入口，组织准入和成员权限仍由后端重新校验。
 - 供应商开放需求只来自后端按租户生成的投递快照，页面不直接请求其他组织的需求源数据。
 - 公共门户中的需求是本地开发预览用的合成样例，生产构建不包含该样例；当前后端没有公共需求授权、匿名投影或公开查询 API，未接入前不得对外展示业务需求。
-- `/account`、`/workspace/employer` 和 `/workspace/supplier` 仅在 Vite 开发模式注册，用于评审页面结构；它们当前使用演示状态/数据，不代表真实登录、组织资格或业务处理已接通。
+- `/__dev/workspace/employer` 和 `/__dev/workspace/supplier` 仅在 Vite 开发模式注册，用于评审页面结构；它们使用演示状态/数据，不代表真实业务处理已接通。
 - `/__dev/console` 是仅开发模式可用的 API 联调入口，不会出现在公开导航，也不会编入生产构建。
 
 ## 安装与启动
@@ -44,7 +44,9 @@ npm run build
 npm run lint
 ```
 
-`@playwright/test` 已作为开发依赖安装。浏览器检查使用仓库 `/playwright` 技能提供的 CLI 流程；需要编写端到端用例时再新增 `tests/e2e/` 和对应 `playwright.config.ts`，不要把令牌或真实业务数据写入测试夹具。
+`@playwright/test` 已作为开发依赖安装。浏览器手工验收使用仓库 `/playwright` 技能提供的 CLI 流程；不要把令牌、验证码或真实业务数据写入仓库测试夹具。
+
+认证页面联调前需在后端 `local` profile 打开 `AUTH_ENABLED=true`、`AUTH_MOCK_SMS_ENABLED=true`，配置独立 RSA 密钥、手机号 HMAC 密钥和数据加密密钥；生产 profile 不可启用 Mock SMS。开发页只在成功发起挑战后通过 loopback Mock SMS 邮箱展示合成验证码。
 
 ## 页面与接口对应
 

@@ -1,14 +1,235 @@
 <script setup lang="ts">
-/* eslint-disable max-len */
-import { ArrowRight, CircleCheck, Clock, DocumentAdd, OfficeBuilding } from '@element-plus/icons-vue'
+import { onMounted, ref } from 'vue'
+import { authApi, type AccountSummary, type OrganizationEntry } from './api/auth'
+import { identityApi } from '../onboarding/api/identity'
+import type { MembershipRole, OrganizationForm, OrganizationRole } from '../onboarding/api/types'
+import { logoutSession, setOrganizationId, setToken } from '../../platform/session/session'
 import PublicHeader from '../../shared/ui/PublicHeader.vue'
+import OrganizationApplicationForm from './OrganizationApplicationForm.vue'
+import OrganizationProgress from './OrganizationProgress.vue'
+import AccountOrganizationActions from './AccountOrganizationActions.vue'
+import JoinOrganizationForm from './JoinOrganizationForm.vue'
+import AccountSummaryNav from './AccountSummaryNav.vue'
+import AccountStatusNote from './AccountStatusNote.vue'
 
 const emit = defineEmits<{ navigate: [path: string] }>()
+
+const account = ref<AccountSummary>()
+const organizations = ref<OrganizationEntry[]>([])
+const loading = ref(true)
+const actionBusy = ref(false)
+const error = ref('')
+const createFormVisible = ref(false)
+const joinFormVisible = ref(false)
+const editingOrganizationId = ref<string>()
+const editingOrganizationVersion = ref('')
+const correctionReason = ref('')
+const organizationRole = ref<OrganizationRole>('EMPLOYER')
+const requestedRole = ref<MembershipRole>('DEMAND_EDITOR')
+const organizationIdInput = ref('')
+const form = ref<OrganizationForm>({
+  organizationRole: 'EMPLOYER',
+  legalName: '',
+  registrationId: '',
+  authorizationReference: '',
+  qualificationReference: '',
+})
+
+async function loadAccount() {
+  loading.value = true
+  error.value = ''
+  try {
+    const [currentAccount, entries] = await Promise.all([authApi.me(), authApi.organizations()])
+    account.value = currentAccount
+    organizations.value = entries
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '账号信息暂时无法读取。'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function createOrganization() {
+  error.value = ''
+  actionBusy.value = true
+  try {
+    await identityApi.createOrganization({
+      ...form.value,
+      organizationRole: organizationRole.value,
+    })
+    createFormVisible.value = false
+    form.value = {
+      organizationRole: 'EMPLOYER',
+      legalName: '',
+      registrationId: '',
+      authorizationReference: '',
+      qualificationReference: '',
+    }
+    await loadAccount()
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '组织申请暂时无法创建。'
+  } finally {
+    actionBusy.value = false
+  }
+}
+
+async function submitOrganization(organizationId: string) {
+  error.value = ''
+  actionBusy.value = true
+  try {
+    await identityApi.submitOrganization(organizationId)
+    await loadAccount()
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '组织申请暂时无法提交。'
+  } finally {
+    actionBusy.value = false
+  }
+}
+
+async function editOrganizationCorrection(organizationId: string) {
+  error.value = ''
+  actionBusy.value = true
+  try {
+    const organization = await identityApi.getOrganization(organizationId)
+    if (organization.status !== 'NEEDS_CORRECTION') {
+      throw new Error('组织状态已变化，请刷新账号中心后重试。')
+    }
+    editingOrganizationId.value = organizationId
+    editingOrganizationVersion.value = organization.version
+    correctionReason.value = organization.reviewReason || '平台尚未提供补正说明。'
+    organizationRole.value = organization.organizationRole
+    form.value = {
+      organizationRole: organization.organizationRole,
+      legalName: organization.legalName,
+      registrationId: organization.registrationId,
+      authorizationReference: organization.authorizationReference,
+      qualificationReference: organization.qualificationReference || '',
+    }
+    createFormVisible.value = false
+    joinFormVisible.value = false
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '组织补正资料暂时无法读取。'
+  } finally {
+    actionBusy.value = false
+  }
+}
+
+async function saveOrganizationCorrection() {
+  const organizationId = editingOrganizationId.value
+  if (!organizationId) {
+    return
+  }
+  error.value = ''
+  actionBusy.value = true
+  try {
+    await identityApi.updateOrganization(organizationId, {
+      ...form.value,
+      expectedVersion: editingOrganizationVersion.value,
+    })
+    await identityApi.submitOrganization(organizationId)
+    editingOrganizationId.value = undefined
+    correctionReason.value = ''
+    await loadAccount()
+  } catch (cause) {
+    error.value =
+      cause instanceof Error
+        ? `补正提交未完成：${cause.message}。如资料已保存，请刷新后再次提交。`
+        : '补正提交暂时无法完成，请刷新状态后重试。'
+    await loadAccount()
+  } finally {
+    actionBusy.value = false
+  }
+}
+
+/** 处理组织申请表单提交，区分新建草稿与审核补正闭环。 */
+async function submitOrganizationForm() {
+  if (editingOrganizationId.value) {
+    await saveOrganizationCorrection()
+  } else {
+    await createOrganization()
+  }
+}
+
+/** 关闭当前组织资料编辑并清理暂存审核意见。 */
+function cancelOrganizationForm() {
+  editingOrganizationId.value = undefined
+  correctionReason.value = ''
+  createFormVisible.value = false
+}
+
+/** 打开用工方或供应商组织申请表单。 */
+function toggleOrganizationForm(role: OrganizationRole) {
+  if (editingOrganizationId.value) {
+    return
+  }
+  organizationRole.value = role
+  form.value.organizationRole = role
+  createFormVisible.value = !createFormVisible.value
+  joinFormVisible.value = false
+}
+
+/** 切换加入已有组织表单并关闭其他组织申请表单。 */
+function toggleJoinForm() {
+  joinFormVisible.value = !joinFormVisible.value
+  createFormVisible.value = false
+}
+
+/** 关闭加入组织申请表单。 */
+function cancelJoinForm() {
+  joinFormVisible.value = false
+}
+
+async function joinOrganization() {
+  const id = organizationIdInput.value.trim()
+  if (!/^\d+$/.test(id)) {
+    error.value = '请输入组织编号。'
+    return
+  }
+  error.value = ''
+  actionBusy.value = true
+  try {
+    await identityApi.joinOrganization(id, requestedRole.value)
+    joinFormVisible.value = false
+    organizationIdInput.value = ''
+    await loadAccount()
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '加入申请暂时无法提交。'
+  } finally {
+    actionBusy.value = false
+  }
+}
+
+async function enterOrganization(entry: OrganizationEntry) {
+  error.value = ''
+  actionBusy.value = true
+  try {
+    const session = await authApi.selectOrganization(entry.organizationId)
+    setToken(session.accessToken)
+    setOrganizationId(entry.organizationId)
+    emit('navigate', `/workspace/${entry.organizationId}`)
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '当前账号暂不能进入该组织空间。'
+    await loadAccount()
+  } finally {
+    actionBusy.value = false
+  }
+}
+
+async function logout() {
+  await logoutSession()
+  emit('navigate', '/')
+}
+
+onMounted(loadAccount)
 </script>
 
 <template>
   <div class="public-site account-site">
-    <PublicHeader active="account" @navigate="emit('navigate', $event)" @account="emit('navigate', '/account')" />
+    <PublicHeader
+      active="account"
+      @navigate="emit('navigate', $event)"
+      @account="emit('navigate', '/account')"
+    />
     <main class="public-main account-main">
       <div class="account-intro">
         <span class="eyebrow">个人账号</span>
@@ -16,65 +237,66 @@ const emit = defineEmits<{ navigate: [path: string] }>()
         <p>登录只代表你拥有个人账号。组织身份、成员关系和具体操作权限需要分别审核和授权。</p>
       </div>
       <div class="account-layout">
-        <aside class="account-sidebar">
-          <button class="account-nav active" type="button">账号与组织</button>
-          <button class="account-nav" type="button" @click="emit('navigate', '/demands')">公开需求</button>
-          <div class="account-sidebar-help">
-            <strong>需要先了解平台？</strong>
-            <span>你可以继续浏览公开需求，不影响认证申请。</span>
-            <button class="text-action" type="button" @click="emit('navigate', '/demands')">返回需求大厅 <el-icon><ArrowRight /></el-icon></button>
-          </div>
-        </aside>
+        <AccountSummaryNav
+          :account="account"
+          @navigate="emit('navigate', $event)"
+          @logout="logout"
+        />
         <section class="account-content">
-          <div class="account-status-bar">
+          <div v-if="loading" class="account-status-bar">
+            <strong>正在读取账号和组织状态…</strong>
+          </div>
+          <div v-else class="account-status-bar">
             <div>
-              <span class="status-label">当前状态</span>
-              <strong>个人账号已登录</strong>
+              <span class="status-label">个人账号状态</span>
+              <strong>
+                {{ account?.status === 'ACTIVE' ? '账号已验证并启用' : '账号状态需要处理' }}
+              </strong>
             </div>
-            <span class="status-pill neutral">尚未关联通过审核的组织</span>
+            <span
+              class="status-pill"
+              :class="account?.status === 'ACTIVE' ? 'approved' : 'neutral'"
+            >
+              {{ account?.status || '未知' }}
+            </span>
           </div>
-          <div class="account-actions-grid">
-            <button class="account-action" type="button">
-              <span class="action-icon blue"><OfficeBuilding /></span>
-              <strong>申请成为用工方</strong>
-              <span>提交主体和经办授权资料，发布真实用工需求。</span>
-              <em>开始申请 <el-icon><ArrowRight /></el-icon></em>
-            </button>
-            <button class="account-action" type="button">
-              <span class="action-icon green"><DocumentAdd /></span>
-              <strong>申请成为劳务供应商</strong>
-              <span>提交供应商资质和组织资料，参与合适的服务需求。</span>
-              <em>开始申请 <el-icon><ArrowRight /></el-icon></em>
-            </button>
-            <button class="account-action" type="button">
-              <span class="action-icon amber"><CircleCheck /></span>
-              <strong>加入已有组织</strong>
-              <span>使用组织邀请或组织编号提交成员加入申请。</span>
-              <em>提交加入申请 <el-icon><ArrowRight /></el-icon></em>
-            </button>
-          </div>
-          <section class="account-progress">
-            <div class="section-heading-row compact">
-              <div>
-                <span class="eyebrow">认证进度</span>
-                <h2>你的组织资格</h2>
-              </div>
-              <span class="muted-copy">尚未提交申请</span>
-            </div>
-            <div class="progress-line">
-              <div class="progress-step current"><span>1</span><strong>个人账号</strong><small>已完成</small></div>
-              <i></i>
-              <div class="progress-step"><span>2</span><strong>组织申请</strong><small>待开始</small></div>
-              <i></i>
-              <div class="progress-step"><span>3</span><strong>平台审核</strong><small>待开始</small></div>
-              <i></i>
-              <div class="progress-step"><span>4</span><strong>角色空间</strong><small>审核通过后开放</small></div>
-            </div>
-          </section>
-          <div class="account-note">
-            <el-icon><Clock /></el-icon>
-            <span>认证通过不代表当前成员拥有组织全部权限。进入工作空间后，需求、应标、选标和项目操作仍按成员岗位逐项校验。</span>
-          </div>
+
+          <AccountOrganizationActions @create="toggleOrganizationForm" @join="toggleJoinForm" />
+
+          <OrganizationApplicationForm
+            v-if="createFormVisible || editingOrganizationId"
+            :form="form"
+            :organization-role="organizationRole"
+            :is-correction="Boolean(editingOrganizationId)"
+            :correction-reason="correctionReason"
+            :action-busy="actionBusy"
+            @update:form="form = $event"
+            @submit="submitOrganizationForm"
+            @cancel="cancelOrganizationForm"
+          />
+
+          <JoinOrganizationForm
+            v-if="joinFormVisible"
+            :organization-id="organizationIdInput"
+            :requested-role="requestedRole"
+            :action-busy="actionBusy"
+            @update:organization-id="organizationIdInput = $event"
+            @update:requested-role="requestedRole = $event"
+            @submit="joinOrganization"
+            @cancel="cancelJoinForm"
+          />
+
+          <p v-if="error" class="auth-message account-error" role="alert">{{ error }}</p>
+
+          <OrganizationProgress
+            :organizations="organizations"
+            :action-busy="actionBusy"
+            @enter="enterOrganization"
+            @submit="submitOrganization"
+            @correct="editOrganizationCorrection"
+          />
+
+          <AccountStatusNote />
         </section>
       </div>
     </main>

@@ -88,8 +88,7 @@ public class OrganizationService {
      */
     @Transactional
     public View submit(long organizationId) {
-        ExecutionContext.checkPermission("organization:organizations:write");
-        authorization.membership(organizationId, Set.of(MembershipRole.ORGANIZATION_ADMIN));
+        requireApplicationAdministrator(organizationId);
         OrganizationRow organization = requireRow(organizationId);
         if (organization.role() == OrganizationRole.LABOR_SUPPLIER
                 && organization.qualificationReference() == null) {
@@ -120,8 +119,7 @@ public class OrganizationService {
      */
     @Transactional
     public View update(long organizationId, UpdateRequest request) {
-        ExecutionContext.checkPermission("organization:organizations:write");
-        authorization.membership(organizationId, Set.of(MembershipRole.ORGANIZATION_ADMIN));
+        requireApplicationAdministrator(organizationId);
         OrganizationRow organization = requireRow(organizationId);
         if (organization.status() != OrganizationStatus.DRAFT
                 && organization.status() != OrganizationStatus.NEEDS_CORRECTION) {
@@ -275,7 +273,8 @@ public class OrganizationService {
     public java.util.List<View> pendingReviews() {
         authorization.requirePlatformPermission("platform:organizations:review");
         return jdbc.query("""
-                SELECT id, organization_role, legal_name, registration_id, qualification_reference,
+                SELECT id, organization_role, legal_name, registration_id, authorization_reference,
+                       qualification_reference,
                        status, version, application_version, created_by, reviewed_by, review_reason
                 FROM business_organization
                 WHERE status = 'PENDING_REVIEW' AND tenant_id = id
@@ -283,7 +282,8 @@ public class OrganizationService {
                 LIMIT 100
                 """, (result, row) -> new OrganizationRow(result.getLong("id"),
                 OrganizationRole.valueOf(result.getString("organization_role")), result.getString("legal_name"),
-                result.getString("registration_id"), result.getString("qualification_reference"),
+                result.getString("registration_id"), result.getString("authorization_reference"),
+                result.getString("qualification_reference"),
                 OrganizationStatus.valueOf(result.getString("status")), result.getLong("version"),
                 result.getLong("application_version"), result.getLong("created_by"),
                 result.getObject("reviewed_by", Long.class), result.getString("review_reason")).view());
@@ -350,10 +350,12 @@ public class OrganizationService {
      */
     public View get(long organizationId) {
         OrganizationRow row = requireRow(organizationId);
-        if (!isMember(organizationId) && !hasPermission("platform:organizations:review")) {
+        boolean platformReviewer = hasPermission("platform:organizations:review");
+        boolean member = isMember(organizationId);
+        if (!member && !platformReviewer) {
             throw new BusinessException(PlatformError.ACCESS_DENIED);
         }
-        return row.view();
+        return row.view(platformReviewer || isOrganizationAdministrator(organizationId));
     }
 
     /** 判断当前身份是否是该组织的有效成员。 */
@@ -368,21 +370,59 @@ public class OrganizationService {
                 """, Integer.class, organizationId, organizationId, identity.actorId()) > 0;
     }
 
+    /** 组织材料引用只向该组织管理员或平台审核员披露。 */
+    private boolean isOrganizationAdministrator(long organizationId) {
+        return jdbc.queryForObject("""
+                SELECT COUNT(*) FROM business_membership
+                WHERE organization_id = ? AND tenant_id = ? AND actor_id = ?
+                  AND member_role = 'ORGANIZATION_ADMIN' AND status = 'ACTIVE'
+                """, Integer.class, organizationId, organizationId, ExecutionContext.require().actorId()) > 0;
+    }
+
     /** 判断已验证令牌是否含指定平台权限。 */
     private boolean hasPermission(String permission) {
         return ExecutionContext.require().permissions().contains(permission);
     }
 
+    /**
+     * 允许账号本人处理自己组织的审核申请，同时要求已进入组织上下文的更新符合岗位权限。
+     * @param organizationId 目标组织
+     * @throws BusinessException 申请人不匹配、管理员关系撤销或当前身份缺少授权
+     */
+    private void requireApplicationAdministrator(long organizationId) {
+        ExecutionContext.Identity identity = ExecutionContext.require();
+        if (identity.tenantId() != null) {
+            ExecutionContext.checkPermission("organization:organizations:write");
+            authorization.membership(organizationId, Set.of(MembershipRole.ORGANIZATION_ADMIN));
+            return;
+        }
+        boolean applicant = identity.permissions().contains("organization:create")
+                && Boolean.TRUE.equals(jdbc.queryForObject("""
+                SELECT EXISTS(
+                    SELECT 1 FROM business_organization o
+                    JOIN business_membership m ON m.organization_id = o.id AND m.tenant_id = o.tenant_id
+                    WHERE o.id = ? AND o.tenant_id = o.id AND o.created_by = ?
+                      AND o.status IN ('DRAFT', 'NEEDS_CORRECTION')
+                      AND m.actor_id = ? AND m.member_role = 'ORGANIZATION_ADMIN' AND m.status = 'ACTIVE'
+                )
+                """, Boolean.class, organizationId, identity.actorId(), identity.actorId()));
+        if (!applicant) {
+            throw new BusinessException(PlatformError.ACCESS_DENIED);
+        }
+    }
+
     /** 查询组织，不把不存在的组织与可访问性差异暴露给调用方。 */
     private OrganizationRow requireRow(long organizationId) {
         OrganizationRow row = jdbc.query("""
-                SELECT id, organization_role, legal_name, registration_id, qualification_reference,
+                SELECT id, organization_role, legal_name, registration_id, authorization_reference,
+                       qualification_reference,
                        status, version, application_version, created_by, reviewed_by, review_reason
                 FROM business_organization WHERE id = ? AND tenant_id = id
                 """, result -> result.next() ? new OrganizationRow(result.getLong("id"),
                 OrganizationRole.valueOf(result.getString("organization_role")),
                 result.getString("legal_name"), result.getString("registration_id"),
-                result.getString("qualification_reference"), OrganizationStatus.valueOf(result.getString("status")),
+                result.getString("authorization_reference"), result.getString("qualification_reference"),
+                OrganizationStatus.valueOf(result.getString("status")),
                 result.getLong("version"), result.getLong("application_version"), result.getLong("created_by"),
                 result.getObject("reviewed_by", Long.class), result.getString("review_reason")) : null, organizationId);
         if (row == null) {
@@ -424,13 +464,40 @@ public class OrganizationService {
     }
 
     /** 组织查询快照。 */
+    /**
+     * 组织主体、审核状态和受控材料引用的数据库快照。
+     * @param id 组织标识
+     * @param role 用工方或劳务供应商角色
+     * @param legalName 法定名称
+     * @param registrationId 登记编号
+     * @param authorizationReference 受控授权材料引用
+     * @param qualificationReference 受控资质材料引用
+     * @param status 当前准入状态
+     * @param version 乐观并发版本
+     * @param applicationVersion 申请资料版本
+     * @param createdBy 初始申请账号
+     * @param reviewedBy 最近审核账号
+     * @param reviewReason 最近审核意见
+     */
     private record OrganizationRow(long id, OrganizationRole role, String legalName, String registrationId,
-                                   String qualificationReference, OrganizationStatus status, long version,
+                                   String authorizationReference, String qualificationReference,
+                                   OrganizationStatus status, long version,
                                    long applicationVersion, long createdBy, Long reviewedBy, String reviewReason) {
-        /** 映射为 API 返回值。 */
+        /** 将数据库快照映射为完整 API 返回值。 */
         private View view() {
-            return new View(id, role, legalName, registrationId, status, version, applicationVersion,
-                    createdBy, reviewedBy, reviewReason);
+            return view(true);
+        }
+
+        /**
+         * 依据组织成员授权级别决定是否包含受控材料引用。
+         * @param discloseReferences 当前账号是否为管理员或平台审核员
+         * @return 对应授权范围的组织视图
+         */
+        private View view(boolean discloseReferences) {
+            return new View(id, role, legalName, registrationId,
+                    discloseReferences ? authorizationReference : null,
+                    discloseReferences ? qualificationReference : null,
+                    status, version, applicationVersion, createdBy, reviewedBy, reviewReason);
         }
     }
 

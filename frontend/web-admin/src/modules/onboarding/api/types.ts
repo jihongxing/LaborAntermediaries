@@ -22,6 +22,8 @@ export interface Organization {
   organizationRole: OrganizationRole
   legalName: string
   registrationId: string
+  authorizationReference: string
+  qualificationReference?: string
   status: OrganizationStatus
   version: string
   applicationVersion: string

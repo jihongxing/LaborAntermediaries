@@ -96,4 +96,29 @@ class WebFoundationTest {
         properties.getTasks().setLease(Duration.ZERO);
         assertThrows(IllegalStateException.class, () -> new ProductionChecks(properties, crypto, environment).afterPropertiesSet());
     }
+
+    @Test
+    void mockSmsIsRejectedOutsideLocalAndTestProfiles() {
+        FoundationProperties properties = new FoundationProperties();
+        properties.getAuthentication().setMockSmsEnabled(true);
+        MockEnvironment environment = new MockEnvironment();
+        assertThrows(IllegalStateException.class,
+                () -> new ProductionChecks(properties, new CryptoService(properties), environment).afterPropertiesSet());
+        environment.setActiveProfiles("local");
+        new ProductionChecks(properties, new CryptoService(properties), environment).afterPropertiesSet();
+        environment.setActiveProfiles("prod");
+        assertThrows(IllegalStateException.class,
+                () -> new ProductionChecks(properties, new CryptoService(properties), environment).afterPropertiesSet());
+    }
+
+    @Test
+    void enabledLocalAuthenticationRequiresSigningAndPhoneHmacSecrets() {
+        FoundationProperties properties = new FoundationProperties();
+        properties.getAuthentication().setEnabled(true);
+        MockEnvironment environment = new MockEnvironment().withProperty("spring.profiles.active", "local");
+        environment.setActiveProfiles("local");
+
+        assertThrows(IllegalStateException.class,
+                () -> new ProductionChecks(properties, new CryptoService(properties), environment).afterPropertiesSet());
+    }
 }

@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { onSessionExpired } from './platform/http/client'
 
 const router = useRouter()
+onSessionExpired(() => {
+  void router.replace({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } })
+})
 </script>
 
 <template>

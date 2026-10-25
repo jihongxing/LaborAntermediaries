@@ -70,10 +70,33 @@ foundation:
     - business_bid_award
     - business_bp05_snapshot
     - business_bid_supervision_event
+  # 认证账号跨组织共享，不能添加租户列或接受组织过滤。
+  shared-tables:
+    - auth_account
+    - auth_login_identity
+    - auth_credential
+    - auth_verification_challenge
+    - auth_password_reset_ticket
+    - auth_refresh_session
+    - auth_security_event
+    - auth_consent_record
+    - auth_identity_binding_ticket
   security:
     public-key: ${JWT_PUBLIC_KEY:}
     issuer: ${JWT_ISSUER:labor-identity}
     audience: ${JWT_AUDIENCE:labor-backend}
+  authentication:
+    enabled: ${AUTH_ENABLED:false}
+    private-key: ${AUTH_PRIVATE_KEY:}
+    public-key: ${AUTH_PUBLIC_KEY:}
+    issuer: ${AUTH_JWT_ISSUER:labor-auth}
+    audience: ${AUTH_JWT_AUDIENCE:labor-backend}
+    phone-hmac-key: ${AUTH_PHONE_HMAC_KEY:}
+    mock-sms-enabled: ${AUTH_MOCK_SMS_ENABLED:false}
+    challenge-retention: ${AUTH_CHALLENGE_RETENTION:24h}
+    session-retention: ${AUTH_SESSION_RETENTION:90d}
+    security-event-retention: ${AUTH_SECURITY_EVENT_RETENTION:730d}
+    retention-cleanup-interval-ms: ${AUTH_RETENTION_CLEANUP_INTERVAL_MS:86400000}
   crypto:
     active-key: ${CRYPTO_ACTIVE_KEY:}
   storage:

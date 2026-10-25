@@ -82,7 +82,7 @@ function openDemand(id: string) {
 }
 
 function showAccount() {
-  emit('navigate', '/account')
+  emit('navigate', '/login')
 }
 </script>
 

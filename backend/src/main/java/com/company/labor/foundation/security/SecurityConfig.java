@@ -1,9 +1,9 @@
 package com.company.labor.foundation.security;
 
 import com.company.labor.common.error.PlatformError;
-
 import com.company.labor.foundation.FoundationProperties;
 import com.company.labor.foundation.context.ExecutionContext;
+import com.company.labor.modules.auth.AuthSessionService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -11,6 +11,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.MDC;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpHeaders;
@@ -45,6 +46,7 @@ import java.security.interfaces.RSAPublicKey;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import com.nimbusds.jwt.SignedJWT;
 
 /**
  * 配置无状态 JWT 资源服务器、接口访问规则与显式跨域白名单。
@@ -64,39 +66,75 @@ public class SecurityConfig {
      */
     @Bean
     public JwtDecoder jwtDecoder(FoundationProperties properties, ResourceLoader resources,
-                                 TokenRevocations revocations) throws IOException {
+                                 TokenRevocations revocations,
+                                 ObjectProvider<AuthSessionService> sessions) throws IOException {
         FoundationProperties.Security settings = properties.getSecurity();
-        if (settings.getPublicKey().isBlank()) {
-            // 未配置不能退化为解析但不验签，否则开发配置可能形成认证绕过。
-            return token -> {
-                throw new BadJwtException("JWT verification is not configured");
-            };
+        JwtDecoder external = settings.getPublicKey().isBlank()
+                ? token -> { throw new BadJwtException("JWT verification is not configured"); }
+                : decoder(loadPublicKey(settings.getPublicKey(), resources), settings.getIssuer(), settings.getAudience(),
+                revocations, null);
+        FoundationProperties.Authentication localSettings = properties.getAuthentication();
+        if (!localSettings.isEnabled()) {
+            return external;
         }
-        RSAPublicKey publicKey;
-        try (InputStream input = resources.getResource(settings.getPublicKey()).getInputStream()) {
-            publicKey = RsaKeyConverters.x509().convert(input);
+        JwtDecoder local = decoder(loadPublicKey(localSettings.getPublicKey(), resources), localSettings.getIssuer(),
+                localSettings.getAudience(), revocations, sessions.getIfAvailable());
+        return token -> {
+            try {
+                String issuer = SignedJWT.parse(token).getJWTClaimsSet().getIssuer();
+                return localSettings.getIssuer().equals(issuer) ? local.decode(token) : external.decode(token);
+            } catch (java.text.ParseException exception) {
+                throw new BadJwtException("JWT cannot be parsed", exception);
+            }
+        };
+    }
+
+    /**
+     * 读取严格配置的 X.509 RSA 公钥资源。
+     * @param location Spring 资源位置
+     * @param resources Spring 资源加载器
+     * @return 已解析 RSA 公钥
+     * @throws IOException 资源无法读取或内容不是 X.509 RSA 公钥
+     */
+    private RSAPublicKey loadPublicKey(String location, ResourceLoader resources) throws IOException {
+        try (InputStream input = resources.getResource(location).getInputStream()) {
+            return RsaKeyConverters.x509().convert(input);
         }
+    }
+
+    /**
+     * 为单个发行方配置 RS256 验签和业务声明检查。
+     * @param publicKey 发行方 RSA 公钥
+     * @param issuer 必须精确匹配的发行方
+     * @param audience 必须包含的受众
+     * @param revocations JWT 撤销状态查询
+     * @param sessions 本地 Refresh Session 查询；外部兼容身份不使用会话声明
+     * @return 发行方专用 JWT 解码器
+     */
+    private JwtDecoder decoder(RSAPublicKey publicKey, String issuer, String audience,
+                               TokenRevocations revocations, AuthSessionService sessions) {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(publicKey).build();
-        OAuth2TokenValidator<Jwt> required = jwt -> validateClaims(jwt, settings, revocations);
+        OAuth2TokenValidator<Jwt> required = jwt -> validateClaims(jwt, audience, revocations, sessions);
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
-                JwtValidators.createDefaultWithIssuer(settings.getIssuer()), required));
+                JwtValidators.createDefaultWithIssuer(issuer), required));
         return decoder;
     }
 
     /**
      * 校验业务要求的声明格式，并检查撤销状态。
      * @param jwt 已解码的令牌
-     * @param settings 预期受众等安全配置
+     * @param audience 预期受众
      * @param revocations 撤销记录查询服务
+     * @param sessions 本地会话有效性查询
      * @return 校验成功或统一的令牌拒绝结果
      * @throws JwtException 撤销数据库不可用，不能把查询失败视为未撤销
      */
-    private OAuth2TokenValidatorResult validateClaims(Jwt jwt, FoundationProperties.Security settings,
-                                                       TokenRevocations revocations) {
+    private OAuth2TokenValidatorResult validateClaims(Jwt jwt, String audience, TokenRevocations revocations,
+                                                       AuthSessionService sessions) {
         try {
             if (jwt.getExpiresAt() == null || jwt.getId() == null || jwt.getId().isBlank()
                     || jwt.getId().length() > 200 || jwt.getAudience() == null
-                    || !jwt.getAudience().contains(settings.getAudience())
+                    || !jwt.getAudience().contains(audience)
                     || Long.parseLong(jwt.getSubject()) <= 0) {
                 return invalidToken();
             }
@@ -108,6 +146,18 @@ public class SecurityConfig {
             if (permissions != null) {
                 if (!(permissions instanceof List<?> values) || values.stream()
                         .anyMatch(value -> !(value instanceof String text) || !text.matches("[a-zA-Z0-9:._-]{1,100}"))) {
+                    return invalidToken();
+                }
+            }
+            Object sessionId = jwt.getClaims().get("session_id");
+            if (sessionId != null) {
+                Object contextType = jwt.getClaims().get("context_type");
+                Object contextVersion = jwt.getClaims().get("context_version");
+                Long tenantId = tenant == null ? null : Long.valueOf(tenant.toString());
+                if (!(sessionId instanceof String value) || sessions == null
+                        || !(contextType instanceof String type) || contextVersion == null
+                        || !sessions.isValidAccessContext(value, Long.parseLong(jwt.getSubject()), type,
+                        tenantId, Integer.parseInt(contextVersion.toString()))) {
                     return invalidToken();
                 }
             }
@@ -149,6 +199,9 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(access -> access
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        .requestMatchers("/auth/register/**", "/auth/login/**", "/auth/password-reset/**",
+                                "/auth/dev/mock-sms/**",
+                                "/auth/csrf", "/auth/token/refresh", "/auth/logout").permitAll()
                         .requestMatchers("/actuator/**").hasAuthority("foundation:observe")
                         .anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions
@@ -177,9 +230,9 @@ public class SecurityConfig {
         CorsConfiguration cors = new CorsConfiguration();
         cors.setAllowedOrigins(List.copyOf(properties.getSecurity().getAllowedOrigins()));
         cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Request-Id", "Idempotency-Key"));
+        cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Request-Id", "Idempotency-Key", "X-CSRF-Token"));
         cors.setExposedHeaders(List.of("X-Request-Id"));
-        cors.setAllowCredentials(false);
+        cors.setAllowCredentials(!properties.getSecurity().getAllowedOrigins().isEmpty());
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", cors);
         return source;

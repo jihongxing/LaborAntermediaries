@@ -80,7 +80,7 @@ backend/
 └── target/                               自动生成的构建产物
 ```
 
-当前已落地的首批业务模块为 `modules/identity`（组织、成员和审核）、`modules/demand`（需求版本、审核、按租户投递、发布和暂停/关闭）与 `modules/bidding`（应标版本、独立选标、绝对配额、供应商确认、监督证据和 BP-05 快照交接）。它们只依赖 `foundation`/`common`，不把账号注册、JWT 签发、外部资质核验或真实收费伪装成本地实现；供应商读取使用发布时生成的目标租户投递快照，不跨租户查询需求源表。比例配额因需求版本尚未承载取整/余数合同而明确拒绝。
+当前已落地 `modules/auth`（手机号账号、Mock SMS、RS256 会话和显式身份绑定准备）、`modules/identity`（组织、成员和审核）、`modules/demand`（需求版本、审核、按租户投递、发布和暂停/关闭）与 `modules/bidding`（应标版本、独立选标、绝对配额、供应商确认、监督证据和 BP-05 快照交接）。本地账号认证默认关闭，必须显式配置密钥后启用；认证模块不接入真实短信或真实微信，也不实现工人/经纪人业务关系。供应商读取使用发布时生成的目标租户投递快照，不跨租户查询需求源表。比例配额因需求版本尚未承载取整/余数合同而明确拒绝。
 
 | 位置 | 应当放置 | 不应放置 |
 |---|---|---|
@@ -180,19 +180,25 @@ mvn -f backend/pom.xml spring-boot:run '-Dspring-boot.run.profiles=local'
 
 - API 前缀：`/api`；匿名健康检查：`GET /api/actuator/health`。
 - `local` 开启 `/api/swagger-ui/index.html` 和 `/api/v3/api-docs`，仍需 Bearer 认证。
-- 除健康检查外，接口默认全部认证；`/api/actuator/**` 还需 `foundation:observe`。
+- 认证开关关闭时，除健康检查外接口均要求 Bearer 身份；启用认证后，注册、登录、找回及 CSRF/刷新入口按认证控制器的会话与 CSRF 规则开放，账号和组织读取仍要求本地 Access Token。`/api/actuator/**` 还需 `foundation:observe`。
 - 未配置 JWT 公钥时，所有令牌均拒绝，没有本地免认证开关。
 - `GET /api/actuator/health/readiness` 可用于就绪检查；默认不输出依赖详情。
 
 ## 2. 认证与安全配置
 
-本工程是资源服务器，验证外部可信身份服务签发的 **RS256 JWT**，不签发令牌、不提供账号登录；首批业务模块提供组织成员关系和需求门禁，账号注册、联系方式验证及令牌签发仍由外部身份服务负责。
+业务接口继续作为资源服务器验证 **RS256 JWT**。此外，`modules/auth` 提供可选的本地手机号账号认证：`AUTH_ENABLED` 默认 `false`，开启后由本地服务签发短期 RS256 Access Token，并用 HttpOnly Refresh Cookie 轮换会话。现有外部身份与本地账号不会自动合并；生产身份迁移、真实短信和微信登录不在本次实现范围内。
 
 | 环境变量 / 配置 | 要求 |
 |---|---|
 | `JWT_PUBLIC_KEY` | X.509 PEM RSA 公钥资源，例如 `file:/absolute/path/public.pem` |
 | `JWT_ISSUER` | 必须与 JWT `iss` 一致，默认 `labor-identity` |
 | `JWT_AUDIENCE` | 必须包含于 JWT `aud`，默认 `labor-backend` |
+| `AUTH_ENABLED` | 是否启用本地账号端点，默认 `false` |
+| `AUTH_PRIVATE_KEY` / `AUTH_PUBLIC_KEY` | 本地签发 RSA PKCS#8 私钥与 X.509 公钥资源；启用认证时必填且必须成对 |
+| `AUTH_JWT_ISSUER` / `AUTH_JWT_AUDIENCE` | 本地令牌发行者与受众；需与资源服务器对应验证配置一致 |
+| `AUTH_PHONE_HMAC_KEY` | 手机号索引摘要密钥，启用认证时至少 32 UTF-8 字节；须独立于数据加密密钥 |
+| `AUTH_MOCK_SMS_ENABLED` | 仅 `local`/`test` profile 可启用；生产 profile 拒绝 Mock SMS |
+| `foundation.authentication.refresh-cookie-secure` | HTTPS 环境必须为 `true`；仅本地 HTTP 联调可显式设为 `false` |
 | `foundation.security.allowed-origins` | CORS 精确来源列表；默认不允许跨域，不接受 `*` |
 | `STORAGE_ROOT` | 私有文件根目录，不配置为静态资源或 Web 服务器公开目录 |
 | `CRYPTO_ACTIVE_KEY` | AES 活动密钥版本 |
@@ -201,7 +207,7 @@ mvn -f backend/pom.xml spring-boot:run '-Dspring-boot.run.profiles=local'
 
 必要 JWT 声明：`iss`、`aud`、`exp`、`jti`、正整数形式的 `sub`。可选 `tenant_id` 为正整数，`permissions` 为字符串数组，例如 `["foundation:files:read"]`。访问需要组织上下文的能力时，`tenant_id` 必须存在。权限是精确字符串，不通过 `admin` 角色绕过。
 
-身份发行方必须先验证成员关系再签发组织上下文。客户端的组织请求头不参与身份构造。`TokenRevocations.revoke(jti, expiry)` 支持持久化撤销；撤销存储不可用时拒绝认证。组织成员变更后的即时撤销需由后续身份模块集成，当前不承诺自动联动。
+本地 `/api/auth/context` 会在签发组织上下文前重新检查账号、组织与成员状态；外部身份发行方也必须遵守同样的成员校验要求。客户端组织请求头不参与身份构造。`TokenRevocations.revoke(jti, expiry)` 支持持久化撤销；撤销存储不可用时拒绝认证。组织成员变更后的即时撤销仍需按具体业务授权在服务端复核，不能仅依赖已有 JWT 声明。
 
 配置加密密钥可以使用受保护的外部 YAML，并通过 `SPRING_CONFIG_ADDITIONAL_LOCATION` 加载；不要将真实密钥提交仓库：
 
@@ -280,9 +286,13 @@ mvn -Pintegration clean verify
 
 CI 使用 Java 17 + PostgreSQL 16，执行 Checkstyle、全部单元测试、打包、Failsafe 集成测试和 JaCoCo 报告，失败不跳过。报告在 `target/surefire-reports`、`target/failsafe-reports`、`target/site/jacoco/index.html`。覆盖率统计全部项目类，不对第三方 SQL 解析器做字节码插桩；Maven `verify` 强制检查全后端 **LINE ≥80%**，未排除低覆盖类。仅运行 `mvn test` 不执行完整集成与覆盖门禁。
 
-2026-10-25 本机验证记录：Podman 隔离测试数据库通过 `compose.test.yml` 提供；在 `labor_foundation_test` 上执行
+2026-10-25 历史验证记录：Podman 隔离测试数据库通过 `compose.test.yml` 提供；在 `labor_foundation_test` 上执行
 `mvn -Pintegration clean verify`，Flyway V1～V7 迁移、170 项单元测试、44 项集成测试（其中 BP-04 为 16 项）和 JaCoCo 门禁全部通过，Checkstyle 为 0 违规。
 不带 `-Pintegration` 的 `mvn clean verify` 不执行 `*IT`，当前覆盖率约 51% 并按门禁失败；它不能替代完整命令。
+
+2026-10-26 完整认证验收记录：独立 Podman PostgreSQL（固定端口 55444）验证 Flyway V1～V9；`mvn -Pintegration clean verify` 的 179 项单元测试、57 项集成测试与 JaCoCo 门禁通过，Checkstyle 为 0 违规。Web type-check、production build、lint 全部通过；Playwright 验证注册、Mock SMS、找回并重置密码、密码登录、短信登录、刷新后恢复会话、退出和未认证访问重定向。此记录仅覆盖 local/test，不表示可生产启用。
+
+认证功能需要设置 `AUTH_ENABLED=true`、本地 RSA 私钥/公钥、至少 32 UTF-8 字节的 `AUTH_PHONE_HMAC_KEY`、数据加密密钥和 `AUTH_MOCK_SMS_ENABLED=true`，仅可使用 `local`/`test` profile；生产 profile 会拒绝 Mock SMS。账号、挑战、Refresh 会话、安全事件和显式身份绑定票据属于跨组织共享认证表。挑战/重置保留期默认 24 小时，会话 90 天，安全事件 730 天；每日清理仅删除超过各自期限的数据，不删除未结业务凭证。
 
 ### 业务开发准入
 

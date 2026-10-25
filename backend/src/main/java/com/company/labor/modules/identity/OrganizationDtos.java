@@ -73,6 +73,8 @@ public final class OrganizationDtos {
      * @param organizationRole 组织角色
      * @param legalName 登记名称
      * @param registrationId 组织登记标识
+     * @param authorizationReference 受控的经办授权材料引用
+     * @param qualificationReference 受控的供应商资质材料引用
      * @param status 当前组织状态
      * @param version 乐观版本
      * @param applicationVersion 只追加的申请资料版本
@@ -85,6 +87,8 @@ public final class OrganizationDtos {
             OrganizationRole organizationRole,
             String legalName,
             String registrationId,
+            String authorizationReference,
+            String qualificationReference,
             OrganizationStatus status,
             long version,
             long applicationVersion,

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ArrowRight, User } from '@element-plus/icons-vue'
 
-defineProps<{ active?: 'home' | 'demands' | 'account' }>()
+defineProps<{ active?: 'home' | 'demands' | 'account' | 'login' | 'register' }>()
 const emit = defineEmits<{
   navigate: [path: string]
   account: []
@@ -26,14 +26,14 @@ const emit = defineEmits<{
         需求大厅
       </button>
       <button type="button" @click="emit('navigate', '/#how-it-works')">平台如何协作</button>
-      <button type="button" @click="emit('navigate', '/account')">组织入驻</button>
+      <button type="button" @click="emit('navigate', '/register')">组织入驻</button>
     </nav>
     <div class="public-header-actions">
-      <button class="public-login" type="button" @click="emit('account')">
+      <button class="public-login" type="button" @click="emit('navigate', '/login')">
         <el-icon><User /></el-icon>
         登录
       </button>
-      <button class="public-primary" type="button" @click="emit('account')">
+      <button class="public-primary" type="button" @click="emit('navigate', '/register')">
         注册 / 组织入驻
         <el-icon><ArrowRight /></el-icon>
       </button>

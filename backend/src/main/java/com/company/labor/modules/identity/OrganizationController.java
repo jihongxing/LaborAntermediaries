@@ -46,7 +46,7 @@ public class OrganizationController {
     }
 
     /**
-     * 查询当前成员可访问的组织状态。
+     * 查询当前成员可访问的组织状态；材料引用只返回给组织管理员或平台审核员。
      * @param organizationId 组织标识
      * @return 组织视图
      */
