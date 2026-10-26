@@ -73,9 +73,12 @@ class SupplyChainFoundationIT {
                     PRIMARY KEY(resource_id, tenant_id, actor_id))
                 """);
         jdbc.execute("""
-                TRUNCATE foundation_snapshot, foundation_snapshot_head, resource_participant_fixture,
+                TRUNCATE platform_audit_finding_claim_request, platform_audit_finding_claim,
+                    platform_audit_finding_entry, platform_audit_finding, platform_audit_query,
+                    foundation_snapshot, foundation_snapshot_head, resource_participant_fixture,
                     foundation_audit, foundation_task
                 """);
+        FoundationIT.resetAuditChainForTest(jdbc);
         jdbc.update("INSERT INTO resource_participant_fixture VALUES (?, ?, ?), (?, ?, ?)",
                 RESOURCE.id(), 11L, 7L, RESOURCE.id(), 22L, 8L);
     }

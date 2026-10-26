@@ -12,6 +12,7 @@ import com.company.labor.modules.bidding.BiddingDtos.SubmitRequest;
 import com.company.labor.modules.bidding.BiddingService;
 import com.company.labor.modules.demand.DemandDtos;
 import com.company.labor.modules.demand.DemandService;
+import com.company.labor.modules.platform.PlatformTaskService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -69,6 +70,9 @@ class BiddingFoundationIT {
     /** BP-03 生命周期服务。 */
     @Autowired
     private DemandService demands;
+    /** G5 岗位认领服务；需求审核必须先认领当前修订任务。 */
+    @Autowired
+    private PlatformTaskService platformTasks;
 
     /** 复用独立 PostgreSQL 测试数据库配置。 */
     @DynamicPropertySource
@@ -81,13 +85,22 @@ class BiddingFoundationIT {
     void reset() {
         ExecutionContext.clear();
         jdbc.execute("""
-                TRUNCATE business_bp05_snapshot, business_bid_supervision_event,
+                TRUNCATE platform_task_claim_request, platform_task_conflict, platform_task_claim,
+                    platform_review_evidence_verification, platform_appeal_review_result, platform_review_task,
+                    platform_appeal_case, platform_review_correction_item, platform_review_case,
+                    business_bp05_snapshot, business_bid_supervision_event,
                     business_bid_award, business_bid_revision, business_bid,
                     business_demand_delivery, business_review_decision, business_demand_revision,
                     business_demand, business_membership_request, business_membership,
                     business_organization_revision, business_organization,
                     foundation_idempotency, foundation_audit CASCADE
                 """);
+        FoundationIT.resetAuditChainForTest(jdbc);
+        jdbc.update("""
+                INSERT INTO auth_account(id, status)
+                VALUES (?, 'ACTIVE'), (?, 'ACTIVE'), (?, 'ACTIVE'), (?, 'ACTIVE'), (?, 'ACTIVE'), (?, 'ACTIVE')
+                ON CONFLICT (id) DO NOTHING
+                """, CREATOR, SELECTOR, BIDDER, SECOND_BIDDER, EDITOR, PUBLISHER);
         jdbc.update("""
                 INSERT INTO business_organization
                     (id, tenant_id, organization_role, legal_name, registration_id,
@@ -429,7 +442,13 @@ class BiddingFoundationIT {
         assertEquals("CLOSED", jdbc.queryForObject("SELECT status FROM business_bid WHERE id = ?", String.class, bid.id()));
         assertEquals("EXPIRED", jdbc.queryForObject(
                 "SELECT status FROM business_bid_award WHERE id = ?", String.class, pendingAward));
-        try (var ignored = identity(40, null, Set.of("platform:demands:review"))) {
+        try (var ignored = platformIdentity(40, "DEMAND_REVIEWER")) {
+            long reviewTaskId = jdbc.queryForObject("""
+                    SELECT id FROM platform_review_task
+                    WHERE task_type = 'DEMAND_REVIEW' AND resource_type = 'DEMAND'
+                      AND resource_id = ? AND resource_version = 2
+                    """, Long.class, DEMAND);
+            platformTasks.claim(reviewTaskId, "bidding-demand-review-" + DEMAND + "-v2");
             demands.review(DEMAND, new DemandDtos.ReviewRequest(DemandDtos.ReviewRequest.Decision.APPROVE, null));
         }
         try (var ignored = identity(PUBLISHER, EMPLOYER, Set.of("organization:demands:publish"))) {
@@ -457,12 +476,12 @@ class BiddingFoundationIT {
     @Test
     void supervisionEnforcesConflictRecusal() {
         submit("bid-supervision-conflict", "100");
-        try (var ignored = identity(CREATOR, null, Set.of("platform:bids:supervise"))) {
+        try (var ignored = platformIdentity(CREATOR, "BID_SUPERVISOR")) {
             assertEquals(PlatformError.INDEPENDENT_REVIEW_REQUIRED.code(),
                     assertThrows(BusinessException.class,
                             () -> bidding.supervise(DEMAND, "CHECK", "evidence-1")).getCode());
         }
-        try (var ignored = identity(BIDDER, null, Set.of("platform:bids:supervise"))) {
+        try (var ignored = platformIdentity(BIDDER, "BID_SUPERVISOR")) {
             assertEquals(PlatformError.INDEPENDENT_REVIEW_REQUIRED.code(),
                     assertThrows(BusinessException.class,
                             () -> bidding.supervise(DEMAND, "CHECK", "evidence-2")).getCode());
@@ -473,7 +492,7 @@ class BiddingFoundationIT {
                      to_status, reviewer_id, reason)
                 VALUES (?, 'DEMAND', ?, 1, 'PENDING_REVIEW', 'APPROVE', 'APPROVED_PENDING_PUBLISH', 35, NULL)
                 """, EMPLOYER, DEMAND);
-        try (var ignored = identity(35, null, Set.of("platform:bids:supervise"))) {
+        try (var ignored = platformIdentity(35, "BID_SUPERVISOR")) {
             assertEquals(PlatformError.INDEPENDENT_REVIEW_REQUIRED.code(),
                     assertThrows(BusinessException.class,
                             () -> bidding.supervise(DEMAND, "CHECK", "evidence-3")).getCode());
@@ -482,7 +501,7 @@ class BiddingFoundationIT {
                 SELECT COUNT(*) FROM business_bid_supervision_event
                 WHERE outcome = 'RECUSAL'
                 """, Integer.class));
-        try (var ignored = identity(36, null, Set.of("platform:bids:supervise"))) {
+        try (var ignored = platformIdentity(36, "BID_SUPERVISOR")) {
             bidding.supervise(DEMAND, "CHECK", "evidence-4");
         }
         assertEquals(1, jdbc.queryForObject("""
@@ -494,6 +513,28 @@ class BiddingFoundationIT {
     /** 提交一份供应商应标版本。 */
     private com.company.labor.modules.bidding.BiddingDtos.BidView submit(String key, String amount) {
         return submitAs(BIDDER, SUPPLIER, key, amount);
+    }
+
+    /** 为平台审核和监督用例创建最小真实岗位上下文，匹配实时数据库授权门禁。 */
+    private ExecutionContext.Scope platformIdentity(long actor, String roleCode) {
+        jdbc.update("INSERT INTO auth_account(id, status) VALUES (?, 'ACTIVE') ON CONFLICT (id) DO NOTHING", actor);
+        jdbc.update("""
+                INSERT INTO platform_authorization_grant(account_id, role_code, expires_at)
+                SELECT ?, ?, CURRENT_TIMESTAMP + interval '1 day'
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM platform_authorization_grant
+                    WHERE account_id = ? AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+                )
+                """, actor, roleCode, actor);
+        Set<String> permissions = Set.copyOf(jdbc.queryForList(
+                "SELECT permission_code FROM platform_authorization_role_permission WHERE role_code = ?",
+                String.class, roleCode));
+        if (permissions.isEmpty()) {
+            throw new IllegalStateException("Test platform role has no permissions: " + roleCode);
+        }
+        var identity = new ExecutionContext.Identity(actor, null, permissions, "PLATFORM",
+                "bidding-platform-test-" + actor, roleCode);
+        return ExecutionContext.open(identity, "bidding-platform-it");
     }
 
     /** 以指定供应商身份提交一份应标版本。 */

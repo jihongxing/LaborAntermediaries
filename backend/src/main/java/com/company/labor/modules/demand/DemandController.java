@@ -1,8 +1,8 @@
 package com.company.labor.modules.demand;
 
-import com.company.labor.modules.demand.DemandDtos.ReviewRequest;
 import com.company.labor.modules.demand.DemandDtos.UpsertRequest;
 import com.company.labor.modules.demand.DemandDtos.View;
+import com.company.labor.modules.platform.ReviewCaseHistoryService;
 import com.company.labor.common.Result;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,19 +16,23 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** 提供需求草稿、审核、版本、发布、暂停和撤回 API；履约和资金操作留给后续业务包。 */
+/** 提供申请方需求草稿、版本、发布、暂停和撤回 API；平台审核使用独立岗位任务路由。 */
 @RestController
 @RequestMapping("/demands")
 public class DemandController {
     /** 需求生命周期业务服务。 */
     private final DemandService demands;
+    /** 经用工方成员授权的需求历史读取服务。 */
+    private final ReviewCaseHistoryService reviewHistory;
 
     /**
      * 创建需求控制器。
      * @param demands 需求业务服务
+     * @param reviewHistory 事项历史服务
      */
-    public DemandController(DemandService demands) {
+    public DemandController(DemandService demands, ReviewCaseHistoryService reviewHistory) {
         this.demands = demands;
+        this.reviewHistory = reviewHistory;
     }
 
     /**
@@ -55,6 +59,17 @@ public class DemandController {
     }
 
     /**
+     * 查询当前用工组织成员所属需求的审核历史。
+     * @param demandId 需求编号
+     * @return 该需求已提交版本和公开审核说明
+     */
+    @GetMapping("/{demandId}/review-history")
+    public Result<com.company.labor.modules.platform.ReviewCaseHistoryDtos.View> reviewHistory(
+            @PathVariable long demandId) {
+        return Result.success(reviewHistory.applicantDemandHistory(demandId));
+    }
+
+    /**
      * 查询当前组织的需求版本摘要。
      * @param organizationId 当前组织
      * @return 当前组织最近更新的需求
@@ -71,15 +86,6 @@ public class DemandController {
     @GetMapping("/open-for-bid")
     public Result<List<View>> openForBid() {
         return Result.success(demands.openForBid());
-    }
-
-    /**
-     * 查询平台需求审核队列。
-     * @return 待审核需求
-     */
-    @GetMapping("/platform/pending")
-    public Result<List<View>> pendingReviews() {
-        return Result.success(demands.pendingReviews());
     }
 
     /**
@@ -103,17 +109,6 @@ public class DemandController {
     @PostMapping("/{demandId}/submit")
     public Result<View> submit(@PathVariable long demandId) {
         return Result.success(demands.submit(demandId));
-    }
-
-    /**
-     * 执行平台需求审核。
-     * @param demandId 需求标识
-     * @param request 审核决定
-     * @return 审核后的需求
-     */
-    @PostMapping("/platform/{demandId}/review")
-    public Result<View> review(@PathVariable long demandId, @Valid @RequestBody ReviewRequest request) {
-        return Result.success(demands.review(demandId, request));
     }
 
     /**

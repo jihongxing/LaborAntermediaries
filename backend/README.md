@@ -23,6 +23,7 @@ record 组件通过类型 JavaDoc 的 `@param` 说明；不逐行翻译代码，
 - [src/](src/README.md)：正式源码、资源与测试；数据库版本变更统一使用 `src/main/resources/db/migration/` 的 Flyway 迁移。
 - [logs/](logs/README.md)：本地运行日志，除说明外不提交。
 - [docs/](docs/supply-chain-foundation.md)：后端能力契约与接入说明；产品需求和全项目技术方案仍归仓库根 `docs/`。
+- `scripts/`：仅用于本地/测试环境的可重复验证脚本；不得把生产凭据或真实数据写入脚本。
 - `target/`：Maven 构建、测试与覆盖率产物，由构建工具生成并忽略；`mvn clean` 会删除它，不在其中维护 README 或任何唯一资料。
 - `pom.xml`、`checkstyle.xml`、`compose.yml`、`compose.test.yml` 分别维护依赖与验证、代码风格、本地开发数据库和隔离测试数据库；变更应同步说明和测试。
 - 必须保持组织隔离、权限校验、审计和错误契约；基础能力与业务规则分离，业务接入遵守下文准入要求。
@@ -40,6 +41,7 @@ Java 包根统一为 `com.company.labor`，**先按能力或业务模块归类�
 ```text
 backend/
 ├── pom.xml / checkstyle.xml / compose.yml / compose.test.yml
+├── scripts/                              本地/测试验证脚本
 ├── src/
 │   ├── main/
 │   │   ├── java/com/company/labor/
@@ -80,7 +82,21 @@ backend/
 └── target/                               自动生成的构建产物
 ```
 
-当前已落地 `modules/auth`（手机号账号、Mock SMS、RS256 会话和显式身份绑定准备）、`modules/identity`（组织、成员和审核）、`modules/demand`（需求版本、审核、按租户投递、发布和暂停/关闭）与 `modules/bidding`（应标版本、独立选标、绝对配额、供应商确认、监督证据和 BP-05 快照交接）。本地账号认证默认关闭，必须显式配置密钥后启用；认证模块不接入真实短信或真实微信，也不实现工人/经纪人业务关系。供应商读取使用发布时生成的目标租户投递快照，不跨租户查询需求源表。比例配额因需求版本尚未承载取整/余数合同而明确拒绝。
+当前已落地 `modules/auth`（手机号账号、Mock SMS、RS256 会话和显式身份绑定准备）、`modules/identity`（组织、成员和审核）、`modules/demand`（需求版本、审核、按租户投递、发布和暂停/关闭）、`modules/bidding`（应标版本、独立选标、绝对配额、供应商确认、监督证据和 BP-05 快照交接）及 `modules/platform`（稳定审核事项、申请方历史、版本任务、原子认领、回避、异常恢复和独立复核）。事项历史复用业务 revision、审核决定和 `foundation_audit` 为真源；迁移前未知关联显式标记为 `LEGACY_GAP`，不猜测历史提交人或时间。申请方历史接口为 `GET /organizations/{id}/review-history` 与 `GET /demands/{id}/review-history`，分别校验组织管理员或当前用工组织成员并记录读取/拒绝审计。
+
+G5 岗位任务 API 使用 `GET /platform/tasks?taskType=ORGANIZATION_REVIEW|DEMAND_REVIEW|APPEAL_REVIEW` 读取最小摘要；通过 `POST /platform/tasks/{taskId}/claim`（必需 `Idempotency-Key`）、`GET /platform/tasks/{taskId}`、`POST /platform/tasks/{taskId}/release` 和 `POST /platform/tasks/{taskId}/recusals` 完成认领、受控历史读取、释放及自我回避。异常恢复限于 `GET /platform/tasks/recovery` 与 `POST /platform/tasks/{taskId}/recovery`；申请方通过 `POST /review-decisions/{decisionId}/appeals` 申请独立复核，或经 `POST /review-tasks/{taskId}/recusal-requests` 请求回避；独立复核由认领人调用 `POST /platform/tasks/{taskId}/appeal-review`。服务端每次检查账号、实时岗位、版本、任务持有人、利益冲突及申请方组织关系；任务队列不返回未认领详情，认领详情暂不开放材料原件。申请方历史接口不赋予审核权。平台工作台阶段状态及验收证据见[平台管理工作台与审核后台设计](../docs/02-开发阶段/产品设计/04-治理信用与增长/平台管理工作台与审核后台设计-v0.1.md)。本地账号认证默认关闭，必须显式配置密钥后启用；认证模块不接入真实短信或真实微信，也不实现工人/经纪人业务关系。供应商读取使用发布时生成的目标租户投递快照，不跨租户查询需求源表。比例配额因需求版本尚未承载取整/余数合同而明确拒绝。
+
+G9 监察查询与发现 API 使用 `GET /platform/audit` 按组织、事项、版本、处理人/岗位、动作、结果和时间游标查询已接入的审计事件；`GET /platform/audit/coverage` 返回全模块事件目录及接入状态；`GET /platform/audit/requests/{reviewCaseId}` 返回指定事项的跨组织版本与处理历史。监察发现通过 `GET/POST /platform/audit/findings`、`GET /platform/audit/findings/{findingId}`、`POST /platform/audit/findings/{findingId}/claim`、`POST /platform/audit/findings/{findingId}/response` 和 `POST /platform/audit/findings/{findingId}/review` 完成创建、阶段认领、回应、独立复核和关闭追加记录。服务端要求 `platform:audit:read`、`platform:audit:coverage:read` 或 `platform:audit:findings:create`，不切换租户上下文、不开放通用跨租户业务查询；查询和发现操作自身也写入审计。G9 与 G10 已通过本地工程和全链路门禁；G11 仅完成合成数据试点准备，真实生产岗位授权、原件下载/导出、真实 ClamAV、法律/隐私专业评审和单独启用决定仍未完成。
+
+2026-10-26 平台工作台 G10/G11 准备复核：在全新隔离 Podman PostgreSQL 16 `labor_g11_test` 上重新执行 Flyway V1～V23 和 `mvn -Pintegration clean verify`，187 个单元测试、85 个集成测试、Checkstyle、JaCoCo 与 `mvn validate` 全部通过；Web `type-check`、`lint`、`build` 全部通过。另在独立 v2 合成库完成真实注册/登录、离线一次性引导、授权管理员双人授予和撤销监察岗位、申请人自批 403、普通账号越权 403、组织审核、监察查询/覆盖/事项历史、发现回应与独立复核；固定 8080 readiness 返回 200，`/browse` 正向页面验收通过。G11 仅完成合成数据准备与撤销/恢复演练，不能据此启用真实平台审核或监察；真实 ClamAV、生产凭据托管、法律/隐私处理依据和留存删除规则、值守责任与单独启用决定仍待签核。
+
+2026-10-26 G11 ClamAV 工程验证：`backend/compose.test.yml` 启动独立 ClamAV 1.4 容器并固定映射 `127.0.0.1:3310`；等待容器健康后运行 `scripts/verify-clamav-instream.ps1`，实际 INSTREAM clean 合成文本返回 `OK`，EICAR 测试样本返回 `FOUND`；已编译的 `ClamAvEvidenceContentScanner` 连接同一容器返回 clean=`true`、EICAR=`false`。该证据仅证明本地测试容器和应用适配协议可用；生产故障域、签名库更新、容量、留存和安全责任仍待签核。
+
+PW-13 复核补齐异常恢复通知：Flyway V24 建立只追加的 `platform_task_recovery_notice`，`POST /platform/tasks/{taskId}/recovery` 在同一事务内保存理由、解除原认领、退回岗位队列、创建给原认领人的最小站内通知和审计；失败不得出现已退回但无通知。`GET /platform/tasks/recovery-notices` 只按当前认证账号返回本人通知，不要求继续持有已撤销的平台岗位，也不返回材料、其他人员身份或自由文本理由。隔离 PostgreSQL `_test` 库已验证 V1～V24、187 个单元测试和 85 个集成测试无失败、Checkstyle/JaCoCo 通过；HTTP 通知入口的匿名拒绝和普通账号空列表另经 18 项认证集成测试复验。另在 `labor_platform_browser_test` 中通过正式 API 创建合成申请、认领和独立恢复：原认领人读取到 1 条通知，其他账号为 0 条，匿名请求为 401；gstack `/browse` 在原认领人个人账号页确认非空通知可见且控制台无错误。G11 的生产签核和启用决定未因此完成。
+
+2026-10-26 G11 V24 清洁库复验：在独立 `labor_g11_test` 执行 `mvn -Pintegration clean verify`，Flyway 安装至 V24，187 项单元测试、85 项集成测试、Checkstyle 和 JaCoCo 全部通过。合成审核员岗位撤销演练确认旧平台令牌 401、重新登录后个人恢复通知仍可读、新平台上下文 403；演练后恢复岗位。构建前核对并停止占用 8080 的本项目旧 JAR，构建后在原端口重启并确认 readiness 200。G11 仍需运营、法律、隐私、安全签核及单独启用决定。
+
+G6 材料通过 `POST/GET /review-evidence/organizations/{id}`、`POST/GET /review-evidence/demands/{id}` 绑定或读取申请方当前版本的材料引用；认领任务通过 `GET /platform/tasks/{taskId}/evidence` 读取最小材料摘要，并通过 `GET /platform/tasks/{taskId}/evidence/{evidenceId}/preview?page=0` 逐页读取服务端栅格化 PNG。上传仍使用既有私有文件接口；只有上传者本人可绑定其文件，组织材料要求组织管理员，需求材料要求组织管理员或需求编辑员。仅接受 PDF/JPEG/PNG，并要求绑定当前 `DRAFT` 或 `NEEDS_CORRECTION` 版本。ClamAV clamd 配置项为 `foundation.storage.evidence-scanner-host`、`evidence-scanner-port`（默认 3310）和 `evidence-scanner-timeout`（默认 10 秒）；主机留空时关闭且失败关闭。审核材料不能通过原件下载接口读取；监察访问、敏感原件下载/导出及真实 ClamAV 部署仍未通过专项门禁。
 
 | 位置 | 应当放置 | 不应放置 |
 |---|---|---|
@@ -142,6 +158,8 @@ backend/
 
 需要 JDK 17、Maven、PostgreSQL 16；也可使用本目录的 Compose 或 Podman Compose 启动数据库。以下是 PowerShell 示例，密码应自行生成并通过环境注入：
 
+本地后端默认绑定 `127.0.0.1:8080`；启动前先检查并复用本项目旧服务，不自动递增端口。容器或反向代理部署必须由部署配置显式设置 `SERVER_ADDRESS`，不能依赖本地默认值。
+
 ```powershell
 $env:JAVA_HOME = '你的 JDK 17 目录'
 $env:DB_PASSWORD = '自行生成的本地数据库密码'
@@ -158,7 +176,10 @@ podman compose -f compose.test.yml ps
 $env:TEST_DATABASE_URL = 'jdbc:postgresql://localhost:55444/labor_foundation_test'
 $env:TEST_DATABASE_USERNAME = 'labor_test'
 mvn -Pintegration clean verify
+./scripts/verify-clamav-instream.ps1
 ```
+
+`clamav-test` 使用 ClamAV 1.4 测试容器并监听 `127.0.0.1:3310`；若默认镜像仓库不可达，可在启动前设置 `CLAMAV_IMAGE` 为已批准的同版本镜像镜像源。验证脚本只发送合成文本和 EICAR 测试样本，必须得到 clean=`OK`、EICAR=`FOUND` 才能记录本地扫描器工程验证通过。它不代表生产签名库、故障域、容量、留存或安全责任已经签核。
 
 测试结束后停止容器；测试会清空该 `_test` 数据库中的技术表和业务测试表，禁止把 `TEST_DATABASE_URL` 指向开发或生产数据库：
 
@@ -175,6 +196,27 @@ podman compose -f compose.test.yml down
 $env:LOG_PATH = 'backend/logs'
 mvn -f backend/pom.xml spring-boot:run '-Dspring-boot.run.profiles=local'
 ```
+
+审计数据库写入失败时，服务另将受限标识字段以 JSON Lines 追加到 `audit-failures.jsonl`，并强制刷盘。开发环境默认路径为 `backend/logs/audit-failures.jsonl`；生产部署必须用 `AUDIT_FAILURE_LOG_PATH` 指向受控、持久且与数据库故障域隔离的存储卷，并配置容量监控。恢复数据库后，可在一次受控启动中设置 `AUDIT_FAILURE_RECOVERY_ENABLED=true`；启动流程会核对故障记录、补记缺失的失败事件并幂等写入恢复标记。恢复成功后应关闭该开关。故障文件保留原始操作标识和关联号，不含请求正文或异常消息。留存期限、归档与删除策略由 G11 的运营及专业评审决定；不能把本地默认日志目录作为生产恢复保障。
+
+平台工作台 G3 提供独立平台执行上下文和岗位授权 API：`POST /api/auth/platform-context` 受双提交 CSRF 保护；`/api/platform/authorizations/**` 只允许当前平台授权管理员执行岗位变更，监察岗位变更需另一位授权管理员批准。G5 提供上述任务队列、认领、详情、回避、释放、恢复及独立复核 API。平台权限每次请求都按账号状态、有效岗位和岗位权限实时核对，令牌中的权限声明不能单独授权。G5 不开放跨组织监察查询或材料原件访问；生产岗位和试点仍受专项 G11 门禁约束。
+
+首个本地平台授权管理员只能通过一次性离线引导建立。目标必须是数据库中已存在且状态为 `ACTIVE`、没有组织成员关系的账号；该引导不会创建账号或启动 HTTP 端点，且数据库只允许初始化一次。以下示例只用于本地隔离环境，执行前须替换为合成的操作者编号、目标账号编号、明确到期时间及理由，并确认 `DB_URL` 指向预期数据库：
+
+```powershell
+$env:SPRING_MAIN_WEB_APPLICATION_TYPE = 'none'
+$env:PLATFORM_AUTHORIZATION_BOOTSTRAP_ENABLED = 'true'
+$env:PLATFORM_AUTHORIZATION_BOOTSTRAP_OPERATOR_ID = '99111'
+$env:PLATFORM_AUTHORIZATION_BOOTSTRAP_TARGET_ACCOUNT_ID = '122'
+$env:PLATFORM_AUTHORIZATION_BOOTSTRAP_EXPIRES_AT = '2027-01-01T00:00:00Z'
+$env:PLATFORM_AUTHORIZATION_BOOTSTRAP_REASON = '本地隔离环境一次性初始化'
+mvn spring-boot:run '-Dspring-boot.run.profiles=local'
+Remove-Item Env:SPRING_MAIN_WEB_APPLICATION_TYPE, Env:PLATFORM_AUTHORIZATION_BOOTSTRAP_ENABLED,
+    Env:PLATFORM_AUTHORIZATION_BOOTSTRAP_OPERATOR_ID, Env:PLATFORM_AUTHORIZATION_BOOTSTRAP_TARGET_ACCOUNT_ID,
+    Env:PLATFORM_AUTHORIZATION_BOOTSTRAP_EXPIRES_AT, Env:PLATFORM_AUTHORIZATION_BOOTSTRAP_REASON
+```
+
+进程以 `web-application-type=none` 启动后只执行该任务并退出；启用变量不会写入配置文件。不得把示例编号或示例理由用于真实授权。任何生产引导、人员身份核验和凭据托管都必须等 G11 及单独启用决定通过。
 
 默认数据库为 `jdbc:postgresql://localhost:5432/labor_db`，用户为 `labor`；可用 `DB_URL`、`DB_USERNAME`、`DB_PASSWORD` 覆盖。数据库密码没有默认值。Flyway 首次启动创建技术表，不创建业务表。
 
@@ -292,6 +334,11 @@ CI 使用 Java 17 + PostgreSQL 16，执行 Checkstyle、全部单元测试、打
 
 2026-10-26 完整认证验收记录：独立 Podman PostgreSQL（固定端口 55444）验证 Flyway V1～V9；`mvn -Pintegration clean verify` 的 179 项单元测试、57 项集成测试与 JaCoCo 门禁通过，Checkstyle 为 0 违规。Web type-check、production build、lint 全部通过；Playwright 验证注册、Mock SMS、找回并重置密码、密码登录、短信登录、刷新后恢复会话、退出和未认证访问重定向。此记录仅覆盖 local/test，不表示可生产启用。
 
+2026-10-26 平台工作台 G5 验收记录：隔离 Podman PostgreSQL 16 `_test` 库验证 V19；`ReviewCaseMigrationIT` 在专属临时 schema 从 V17 升级 V18～V19，确认既有待审核组织/需求按当前版本回填待办、草稿不生成任务且测试 schema 清理成功。`BusinessFoundationIT` 覆盖认领幂等、认领人专属历史和审核权限、主动释放、独立恢复回队列、当事方/自我回避、并发认领唯一胜者、旧版本异议失效及独立复核人约束；`AuthenticationIT` 覆盖岗位路由权限。修复开放或暂停需求改版后未创建新版审核任务的流程缺口。全量 `mvn -Pintegration clean verify`：182 项单元测试、81 项 PostgreSQL 集成测试全部通过，Checkstyle 0 违规，JaCoCo LINE 覆盖率 87.36%；`mvn validate` 通过且 Checkstyle 0 违规。验证仅限本地合成数据，不表示材料原件访问、监察路由、生产岗位授权或生产启用已批准。
+
+2026-10-26 平台工作台 G6 验收记录：隔离 Podman PostgreSQL 16 `_test` 库从 V19 升级至 V20；`BusinessFoundationIT` 验证组织与需求材料绑定、本人上传和角色限制、伪造/损坏/恶意/扫描失败拒绝、扫描通过不等于真实性通过、跨组织隔离、认领后按当前版本 PNG 预览、旧版本和释放后撤权及允许/拒绝审计；`ClamAvEvidenceContentScannerTest` 通过本地协议模拟覆盖 clean、FOUND、未知/截断响应和超时，控制器测试验证 no-store、nosniff、CSP 与 referrer 响应头。全量 `mvn -Pintegration clean verify`：187 项单元测试、82 项 PostgreSQL 集成测试全部通过；Checkstyle 0 违规，JaCoCo LINE 覆盖率 86.28%；`mvn validate` 通过且 Checkstyle 0 违规。实际 ClamAV 引擎未部署，默认未配置扫描端点因此材料绑定不可用；下载/导出、监察材料访问、法律/隐私专业评审、生产授权和启用未通过。
+2026-10-26 平台工作台 G7 验收记录：隔离 Podman PostgreSQL 16 `_test` 库从 V21 升级至 V22；组织审核队列、任务认领、任务版本详情、材料核验、受控 PNG 预览、通过/补正/拒绝决定和申请方逐项补正历史已接通。`BusinessFoundationIT` 验证逐项补正清单的必填、唯一代码、1～20 条上限、决定类型一致性、版本/事项绑定和数据库追加不可变；`AuthenticationIT` 经真实 HTTP API 走通授权、申请提交、认领前/错岗拒绝、认领后版本详情、逐项补正决定与申请方历史读取。全量 `mvn -Pintegration clean verify`：187 项单元测试、84 项 PostgreSQL 集成测试全部通过，Checkstyle 0 违规，JaCoCo 门禁通过；Web type-check、lint、production build 全部通过。验证仍限本地合成数据；真实 ClamAV、原件下载/导出、跨组织监察查询、法律/隐私专业评审、生产岗位授权和启用未通过。
+2026-10-26 平台工作台 G8 验收记录：需求审核任务专用详情/决定 API 与 Web 工作台已接通；需求审核员必须先原子认领，服务端绑定当前需求版本、租户、岗位权限和回避检查，详情字段白名单不返回组织联系人、供应商、应标或实际报价。需求补正支持 1～20 条唯一代码、版本绑定、申请方未结事项和通过后清空；`AuthenticationIT` 新增真实 HTTP API 验证需求审核授权、未认领拒绝、认领后详情、逐项补正和申请方历史反馈；既有 `BusinessFoundationIT` 覆盖旧版本结论、修订新任务、暂停/撤回和发布门禁。固定 Podman PostgreSQL 16 `_test` 库运行 `mvn -Pintegration clean verify`：187 项单元测试、85 项 PostgreSQL 集成测试全部通过，Checkstyle 0 违规，JaCoCo 门禁通过；另行 `mvn validate` 通过。Web type-check、lint、production build 全部通过。审核通过仍须用工方显式发布；真实 ClamAV、监察查询、原件下载/导出、法律/隐私专业评审、生产岗位授权和启用未通过，下一步 G9。
 认证功能需要设置 `AUTH_ENABLED=true`、本地 RSA 私钥/公钥、至少 32 UTF-8 字节的 `AUTH_PHONE_HMAC_KEY`、数据加密密钥和 `AUTH_MOCK_SMS_ENABLED=true`，仅可使用 `local`/`test` profile；生产 profile 会拒绝 Mock SMS。账号、挑战、Refresh 会话、安全事件和显式身份绑定票据属于跨组织共享认证表。挑战/重置保留期默认 24 小时，会话 90 天，安全事件 730 天；每日清理仅删除超过各自期限的数据，不删除未结业务凭证。
 
 ### 业务开发准入

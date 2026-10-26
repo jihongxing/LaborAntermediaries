@@ -2,9 +2,11 @@ package com.company.labor.common.exception;
 
 import com.company.labor.common.Result;
 import com.company.labor.common.error.PlatformError;
+import com.company.labor.foundation.audit.AuditRecorder;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +32,9 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    /** MVC 权限拒绝和服务失败记录器；独立单元测试可不加载 Spring 依赖。 */
+    @Autowired(required = false)
+    private AuditRecorder auditRecorder;
 
     /**
      * 使用异常声明的 HTTP 状态，兼容历史数字码构造方式。
@@ -39,6 +44,10 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<Result<Void>> business(BusinessException exception) {
+        if ((exception.getHttpStatus() == 401 || exception.getHttpStatus() == 403) && auditRecorder != null) {
+            auditRecorder.recordSecurityEvent("foundation:access:denied", "endpoint", "mvc-business",
+                    "DENIED", "BUSINESS_ACCESS_DENIED");
+        }
         Result<Void> result = Result.error(exception.getCode(), exception.getMessage());
         result.setErrorKey(exception.getErrorKey());
         result.setRequestId(MDC.get("requestId"));
@@ -80,6 +89,10 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Result<Void>> forbidden(AccessDeniedException exception) {
+        if (auditRecorder != null) {
+            auditRecorder.recordSecurityEvent("foundation:access:denied", "endpoint", "mvc-authorization",
+                    "DENIED", "ACCESS_DENIED");
+        }
         return error(PlatformError.ACCESS_DENIED);
     }
 
@@ -147,6 +160,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Result<Void>> unexpected(Exception exception) {
         log.error("Unhandled failure type={}", exception.getClass().getName());
+        if (auditRecorder != null) {
+            auditRecorder.recordSecurityEvent("foundation:request:failed", "endpoint", "mvc-request",
+                    "FAILED", "UNEXPECTED_ERROR");
+        }
         return error(PlatformError.INTERNAL_ERROR);
     }
 

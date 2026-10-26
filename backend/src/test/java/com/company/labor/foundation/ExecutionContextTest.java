@@ -50,4 +50,15 @@ class ExecutionContextTest {
             assertThrows(UnsupportedOperationException.class, () -> ExecutionContext.require().permissions().add("write"));
         }
     }
+
+    /** 验证通用执行上下文检查器不会把 JWT 中的平台静态权限当成授权来源。 */
+    @Test
+    void genericPermissionCheckRejectsStaticPlatformPermissions() {
+        ExecutionContext.Identity platformIdentity = new ExecutionContext.Identity(7, null,
+                Set.of("platform:organizations:review"), "PLATFORM", "session-7", "ORGANIZATION_REVIEWER");
+        try (var scope = ExecutionContext.open(platformIdentity, "platform-test")) {
+            assertThrows(BusinessException.class,
+                    () -> ExecutionContext.checkPermission("platform:organizations:review"));
+        }
+    }
 }

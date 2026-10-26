@@ -3,6 +3,7 @@ package com.company.labor.modules.identity;
 import com.company.labor.common.error.PlatformError;
 import com.company.labor.common.exception.BusinessException;
 import com.company.labor.foundation.context.ExecutionContext;
+import com.company.labor.modules.auth.PlatformAuthorizationService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -14,10 +15,17 @@ import java.util.Set;
 public class OrganizationAuthorization {
     /** 组织业务表的可信查询入口。 */
     private final JdbcTemplate jdbc;
+    /** 平台岗位实时授权查询入口；不使用 JWT 中静态平台权限执行审核门禁。 */
+    private final PlatformAuthorizationService platformAuthorizations;
 
-    /** 创建组织授权服务。 */
-    public OrganizationAuthorization(JdbcTemplate jdbc) {
+    /**
+     * 创建组织授权服务。
+     * @param jdbc 组织成员数据访问入口
+     * @param platformAuthorizations 平台岗位实时授权服务
+     */
+    public OrganizationAuthorization(JdbcTemplate jdbc, PlatformAuthorizationService platformAuthorizations) {
         this.jdbc = jdbc;
+        this.platformAuthorizations = platformAuthorizations;
     }
 
     /**
@@ -75,7 +83,7 @@ public class OrganizationAuthorization {
      * @throws BusinessException 当前身份没有平台岗位权限
      */
     public void requirePlatformPermission(String permission) {
-        ExecutionContext.checkPermission(permission);
+        platformAuthorizations.requirePermission(permission);
     }
 
     /** 组织成员授权的不可变查询结果。 */

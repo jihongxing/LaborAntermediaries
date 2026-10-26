@@ -15,11 +15,17 @@ import com.company.labor.common.exception.BusinessException;
 import com.company.labor.foundation.audit.AuditRecorder;
 import com.company.labor.foundation.context.ExecutionContext;
 import com.company.labor.foundation.persistence.SequenceIds;
+import com.company.labor.modules.platform.ReviewCaseHistoryService;
+import com.company.labor.modules.platform.ReviewCaseType;
+import com.company.labor.modules.platform.PlatformTaskService;
+import com.company.labor.modules.platform.PlatformTaskType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Set;
+import java.util.List;
+import java.util.HashSet;
 
 /** 实现首批组织创建、成员加入和平台审核流程，身份签发仍由外部适配器负责。 */
 @Service
@@ -32,14 +38,29 @@ public class OrganizationService {
     private final AuditRecorder audit;
     /** 组织成员权限查询服务。 */
     private final OrganizationAuthorization authorization;
+    /** 首次提交时创建事项并为后续操作提供版本化审计关联。 */
+    private final ReviewCaseHistoryService reviewHistory;
+    /** 组织提交、认领及审核决定共享事务的岗位任务服务。 */
+    private final PlatformTaskService platformTasks;
 
-    /** 创建组织业务服务。 */
+    /**
+     * 创建组织业务服务。
+     * @param jdbc 组织与成员持久化入口
+     * @param ids 业务标识生成服务
+     * @param audit 追加式审计入口
+     * @param authorization 组织成员权限查询服务
+     * @param reviewHistory 稳定事项与历史服务
+     * @param platformTasks 版本绑定的审核任务服务
+     */
     public OrganizationService(JdbcTemplate jdbc, SequenceIds ids, AuditRecorder audit,
-                               OrganizationAuthorization authorization) {
+                               OrganizationAuthorization authorization, ReviewCaseHistoryService reviewHistory,
+                               PlatformTaskService platformTasks) {
         this.jdbc = jdbc;
         this.ids = ids;
         this.audit = audit;
         this.authorization = authorization;
+        this.reviewHistory = reviewHistory;
+        this.platformTasks = platformTasks;
     }
 
     /**
@@ -76,7 +97,9 @@ public class OrganizationService {
                 INSERT INTO business_membership(organization_id, tenant_id, actor_id, member_role, status, created_by)
                 VALUES (?, ?, ?, 'ORGANIZATION_ADMIN', 'ACTIVE', ?)
                 """, organizationId, organizationId, identity.actorId(), identity.actorId());
-        audit.record("organization:create", "organization", Long.toString(organizationId), "SUCCESS");
+        audit.record("organization:create", "organization", Long.toString(organizationId), "SUCCESS",
+                reviewHistory.auditDetails(ReviewCaseType.ORGANIZATION, organizationId, organizationId, 1,
+                        "DRAFT_CREATED"));
         return get(organizationId);
     }
 
@@ -106,7 +129,13 @@ public class OrganizationService {
                       AND application_version > COALESCE(reviewed_application_version, 0)))
                 """, organizationId, organizationId, organization.version());
         ensureUpdated(updated);
-        audit.record("organization:submit", "organization", Long.toString(organizationId), "SUCCESS");
+        long reviewCaseId = reviewHistory.openOnSubmission(ReviewCaseType.ORGANIZATION, organizationId,
+                organizationId, organization.applicationVersion(), ExecutionContext.require().actorId());
+        platformTasks.openReviewTaskOnSubmission(reviewCaseId, ReviewCaseType.ORGANIZATION, organizationId,
+                organizationId, organization.applicationVersion());
+        audit.record("organization:submit", "organization", Long.toString(organizationId), "SUCCESS",
+                reviewHistory.auditDetails(ReviewCaseType.ORGANIZATION, organizationId, organizationId,
+                        organization.applicationVersion(), "APPLICATION_SUBMITTED"));
         return get(organizationId);
     }
 
@@ -151,7 +180,9 @@ public class OrganizationService {
         ensureUpdated(updated);
         insertRevision(organizationId, organization.applicationVersion() + 1, legalName, registrationId,
                 authorizationReference, optional(request.qualificationReference()), ExecutionContext.require().actorId());
-        audit.record("organization:update", "organization", Long.toString(organizationId), "SUCCESS");
+        audit.record("organization:update", "organization", Long.toString(organizationId), "SUCCESS",
+                reviewHistory.auditDetails(ReviewCaseType.ORGANIZATION, organizationId, organizationId,
+                        organization.applicationVersion() + 1, "APPLICATION_VERSION_CREATED"));
         return get(organizationId);
     }
 
@@ -171,9 +202,32 @@ public class OrganizationService {
                 || organization.status() != OrganizationStatus.PENDING_REVIEW) {
             throw new BusinessException(PlatformError.ACCESS_DENIED);
         }
+        PlatformTaskService.TaskRef taskRef = platformTasks.requireClaimedReviewTask(
+                ReviewCaseType.ORGANIZATION, organizationId, organization.applicationVersion());
         String reason = optional(request.reason());
         if (request.decision() != OrganizationReviewDecision.APPROVE && reason == null) {
             throw new BusinessException(PlatformError.INVALID_ARGUMENT);
+        }
+        List<com.company.labor.modules.identity.OrganizationDtos.CorrectionItemRequest> correctionItems =
+                request.correctionItems() == null ? List.of() : request.correctionItems();
+        if (request.decision() == OrganizationReviewDecision.NEEDS_CORRECTION
+                && (correctionItems.isEmpty() || correctionItems.size() > 20)) {
+            throw new BusinessException(PlatformError.INVALID_ARGUMENT);
+        }
+        if (request.decision() != OrganizationReviewDecision.NEEDS_CORRECTION && !correctionItems.isEmpty()) {
+            throw new BusinessException(PlatformError.INVALID_ARGUMENT);
+        }
+        Set<String> correctionCodes = new HashSet<>();
+        for (var item : correctionItems) {
+            if (item == null || item.itemCode() == null || item.title() == null || item.description() == null
+                    || item.applicantAction() == null) {
+                throw new BusinessException(PlatformError.INVALID_ARGUMENT);
+            }
+            String code = item.itemCode().trim();
+            if (code.isEmpty() || item.title().trim().isEmpty() || item.description().trim().isEmpty()
+                    || item.applicantAction().trim().isEmpty() || !correctionCodes.add(code)) {
+                throw new BusinessException(PlatformError.INVALID_ARGUMENT);
+            }
         }
         if (reason != null && reason.length() > 1000) {
             throw new BusinessException(PlatformError.INVALID_ARGUMENT);
@@ -203,8 +257,62 @@ public class OrganizationService {
                 VALUES (?, 'ORGANIZATION', ?, ?, ?, ?, ?, ?, ?)
                 """, organizationId, organizationId, organization.applicationVersion(), organization.status().name(),
                 request.decision().name(), next.name(), identity.actorId(), reason);
-        audit.record("organization:review", "organization", Long.toString(organizationId), "SUCCESS");
-        return get(organizationId);
+        if (request.decision() == OrganizationReviewDecision.NEEDS_CORRECTION) {
+            appendCorrectionItems(taskRef, organizationId, correctionItems, identity.actorId());
+        }
+        audit.record("organization:review", "organization", Long.toString(organizationId), "SUCCESS",
+                reviewHistory.auditDetails(ReviewCaseType.ORGANIZATION, organizationId, organizationId,
+                        organization.applicationVersion(), request.decision().name()));
+        platformTasks.completeReviewTask(taskRef, request.decision().name());
+        return requireRow(organizationId).view(false);
+    }
+
+    /** 将补正清单和审核决定置于同一事务，并绑定不可变的事项、任务及申请版本。 */
+    private void appendCorrectionItems(PlatformTaskService.TaskRef taskRef,
+                                       long organizationId,
+                                       List<com.company.labor.modules.identity.OrganizationDtos.CorrectionItemRequest> items,
+                                       long actorId) {
+        reviewHistory.appendCorrectionItems(ReviewCaseType.ORGANIZATION, organizationId, organizationId, taskRef,
+                items.stream().map(item -> new ReviewCaseHistoryService.CorrectionItemInput(item.itemCode(),
+                        item.title(), item.description(), item.applicantAction())).toList(), actorId);
+    }
+
+    /**
+     * 通过当前审核员已认领的组织审核任务读取申请详情。
+     * @param taskId 已认领的组织审核任务编号
+     * @return 该任务绑定版本的组织申请最小详情
+     * @throws BusinessException 当前账号未持有有效认领、任务类别错误或任务版本已失效
+     */
+    @Transactional
+    public OrganizationReviewSubject reviewSubject(long taskId) {
+        PlatformTaskService.TaskDetails details = platformTasks.details(taskId);
+        PlatformTaskService.TaskView task = details.task();
+        if (!PlatformTaskType.ORGANIZATION_REVIEW.name().equals(task.taskType())
+                || !ReviewCaseType.ORGANIZATION.name().equals(task.resourceType())) {
+            throw new BusinessException(PlatformError.RESOURCE_NOT_FOUND);
+        }
+        OrganizationRow organization = requireRow(Long.parseLong(task.resourceId()));
+        if (organization.applicationVersion() != task.resourceVersion()
+                || organization.status() != OrganizationStatus.PENDING_REVIEW) {
+            throw new BusinessException(PlatformError.VERSION_CONFLICT);
+        }
+        return new OrganizationReviewSubject(Long.toString(organization.id()), organization.role().name(),
+                organization.legalName(), organization.registrationId(), organization.authorizationReference(),
+                organization.qualificationReference(), organization.status().name(),
+                organization.applicationVersion(), organization.version());
+    }
+
+    /**
+     * 通过指定的已认领组织审核任务提交决定。
+     * @param taskId 已认领的组织审核任务编号
+     * @param request 决定、申请方可见理由和逐项补正内容
+     * @return 可由组织有效成员查看的组织状态
+     * @throws BusinessException 任务授权、回避、冲突或版本校验失败
+     */
+    @Transactional
+    public View reviewTask(long taskId, ReviewRequest request) {
+        OrganizationReviewSubject subject = reviewSubject(taskId);
+        return review(Long.parseLong(subject.organizationId()), request);
     }
 
     /**
@@ -266,27 +374,12 @@ public class OrganizationService {
     }
 
     /**
-     * 查询平台待审核组织申请。
-     * @return 按提交时间排序的申请摘要
+     * 查询组织审核岗位最小任务队列，不返回未认领事项详情或材料引用。
+     * @return 当前审核岗位的任务摘要
      * @throws BusinessException 当前身份没有平台审核权限
      */
-    public java.util.List<View> pendingReviews() {
-        authorization.requirePlatformPermission("platform:organizations:review");
-        return jdbc.query("""
-                SELECT id, organization_role, legal_name, registration_id, authorization_reference,
-                       qualification_reference,
-                       status, version, application_version, created_by, reviewed_by, review_reason
-                FROM business_organization
-                WHERE status = 'PENDING_REVIEW' AND tenant_id = id
-                ORDER BY updated_at, id
-                LIMIT 100
-                """, (result, row) -> new OrganizationRow(result.getLong("id"),
-                OrganizationRole.valueOf(result.getString("organization_role")), result.getString("legal_name"),
-                result.getString("registration_id"), result.getString("authorization_reference"),
-                result.getString("qualification_reference"),
-                OrganizationStatus.valueOf(result.getString("status")), result.getLong("version"),
-                result.getLong("application_version"), result.getLong("created_by"),
-                result.getObject("reviewed_by", Long.class), result.getString("review_reason")).view());
+    public List<PlatformTaskService.QueueItem> pendingReviews() {
+        return platformTasks.queue(PlatformTaskType.ORGANIZATION_REVIEW);
     }
 
     /**
@@ -350,12 +443,11 @@ public class OrganizationService {
      */
     public View get(long organizationId) {
         OrganizationRow row = requireRow(organizationId);
-        boolean platformReviewer = hasPermission("platform:organizations:review");
         boolean member = isMember(organizationId);
-        if (!member && !platformReviewer) {
+        if (!member) {
             throw new BusinessException(PlatformError.ACCESS_DENIED);
         }
-        return row.view(platformReviewer || isOrganizationAdministrator(organizationId));
+        return row.view(isOrganizationAdministrator(organizationId));
     }
 
     /** 判断当前身份是否是该组织的有效成员。 */
@@ -377,11 +469,6 @@ public class OrganizationService {
                 WHERE organization_id = ? AND tenant_id = ? AND actor_id = ?
                   AND member_role = 'ORGANIZATION_ADMIN' AND status = 'ACTIVE'
                 """, Integer.class, organizationId, organizationId, ExecutionContext.require().actorId()) > 0;
-    }
-
-    /** 判断已验证令牌是否含指定平台权限。 */
-    private boolean hasPermission(String permission) {
-        return ExecutionContext.require().permissions().contains(permission);
     }
 
     /**
@@ -504,5 +591,23 @@ public class OrganizationService {
     /** 加入请求查询快照。 */
     private record MembershipRequestRow(long actorId, MembershipRole requestedRole,
                                         MembershipRequestStatus status, long version) {
+    }
+
+    /** 组织审核员认领任务后可读取的最小申请详情。 */
+    public record OrganizationReviewSubject(String organizationId, String organizationRole, String legalName,
+                                             String registrationId, String authorizationReference,
+                                             String qualificationReference, String status,
+                                             long applicationVersion, long entityVersion) {
+        /**
+         * @param organizationId 组织编号，以十进制字符串返回以避免浏览器精度损失
+         * @param organizationRole 用工方或劳务供应商角色
+         * @param legalName 本次提交的组织登记名称
+         * @param registrationId 本次提交的登记编号
+         * @param authorizationReference 申请人提交的授权材料引用
+         * @param qualificationReference 申请人提交的资质材料引用
+         * @param status 当前组织申请状态
+         * @param applicationVersion 任务绑定的申请版本
+         * @param entityVersion 组织资料乐观锁版本
+         */
     }
 }

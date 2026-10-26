@@ -25,6 +25,8 @@ public class AuthSessionService {
     private final AuthCryptography cryptography;
     /** 短时 RS256 Access Token 签发服务。 */
     private final LocalTokenIssuer tokenIssuer;
+    /** 每次进入或验证平台上下文时实时解析授权岗位。 */
+    private final PlatformAuthorizationService platformAuthorizations;
     /** Refresh Session 策略。 */
     private final FoundationProperties.Authentication settings;
     /** 可替换 UTC 时钟。 */
@@ -39,10 +41,12 @@ public class AuthSessionService {
      * @param clock 可替换 UTC 时钟
      */
     public AuthSessionService(JdbcTemplate jdbc, AuthCryptography cryptography, LocalTokenIssuer tokenIssuer,
+                              PlatformAuthorizationService platformAuthorizations,
                               FoundationProperties properties, Clock clock) {
         this.jdbc = jdbc;
         this.cryptography = cryptography;
         this.tokenIssuer = tokenIssuer;
+        this.platformAuthorizations = platformAuthorizations;
         this.settings = properties.getAuthentication();
         this.clock = clock;
     }
@@ -61,7 +65,7 @@ public class AuthSessionService {
         AuthorizationContext context = personalContext(1);
         insertSession(sessionId, familyId, accountId, refreshToken, context, now.plus(settings.getRefreshSessionTtl()), now);
         return new SessionTokens(tokenIssuer.issue(accountId, sessionId, context.type(), context.tenantId(),
-                context.permissions(), context.version()), refreshToken,
+                context.permissions(), context.version(), context.actorRole()), refreshToken,
                 now.plus(settings.getAccessTokenTtl()));
     }
 
@@ -78,12 +82,13 @@ public class AuthSessionService {
         }
         String tokenHash = cryptography.hash("refresh:v1", refreshToken);
         SessionRow session = jdbc.query("""
-                SELECT id, family_id, account_id, client_type, context_type, tenant_id, context_version,
+                SELECT id, family_id, account_id, client_type, context_type, tenant_id, context_version, platform_role,
                        expires_at, rotated_at, revoked_at
                 FROM auth_refresh_session WHERE token_hash = ? FOR UPDATE
                 """, result -> result.next() ? new SessionRow(result.getString("id"), result.getString("family_id"),
                 result.getLong("account_id"), result.getString("client_type"), result.getString("context_type"),
                 result.getObject("tenant_id", Long.class), result.getInt("context_version"),
+                result.getString("platform_role"),
                 result.getTimestamp("expires_at").toInstant(), instant(result.getTimestamp("rotated_at")),
                 instant(result.getTimestamp("revoked_at"))) : null, tokenHash);
         if (session == null) {
@@ -108,7 +113,7 @@ public class AuthSessionService {
         insertSession(nextId, session.familyId(), session.accountId(), nextToken, context,
                 now.plus(settings.getRefreshSessionTtl()), now);
         return new SessionTokens(tokenIssuer.issue(session.accountId(), nextId, context.type(), context.tenantId(),
-                context.permissions(), context.version()), nextToken,
+                context.permissions(), context.version(), context.actorRole()), nextToken,
                 now.plus(settings.getAccessTokenTtl()));
     }
 
@@ -126,12 +131,13 @@ public class AuthSessionService {
             throw new BusinessException(PlatformError.AUTHENTICATION_FAILED);
         }
         SessionRow session = jdbc.query("""
-                SELECT id, family_id, account_id, client_type, context_type, tenant_id, context_version,
+                SELECT id, family_id, account_id, client_type, context_type, tenant_id, context_version, platform_role,
                        expires_at, rotated_at, revoked_at
                 FROM auth_refresh_session WHERE id = ? FOR UPDATE
                 """, result -> result.next() ? new SessionRow(result.getString("id"), result.getString("family_id"),
                 result.getLong("account_id"), result.getString("client_type"), result.getString("context_type"),
                 result.getObject("tenant_id", Long.class), result.getInt("context_version"),
+                result.getString("platform_role"),
                 result.getTimestamp("expires_at").toInstant(), instant(result.getTimestamp("rotated_at")),
                 instant(result.getTimestamp("revoked_at"))) : null, sessionId);
         Instant now = clock.instant();
@@ -143,7 +149,8 @@ public class AuthSessionService {
         AuthorizationContext context = organizationContext(accountId, organizationId, session.contextVersion() + 1);
         int updated = jdbc.update("""
                 UPDATE auth_refresh_session
-                SET context_type = 'ORGANIZATION', tenant_id = ?, context_version = ?, last_used_at = ?
+                SET context_type = 'ORGANIZATION', tenant_id = ?, platform_role = NULL,
+                    context_version = ?, last_used_at = ?
                 WHERE id = ? AND account_id = ? AND rotated_at IS NULL AND revoked_at IS NULL
                 """, organizationId, context.version(), Timestamp.from(now), sessionId, accountId);
         if (updated != 1) {
@@ -151,7 +158,60 @@ public class AuthSessionService {
         }
         recordEvent(accountId, "CONTEXT_SWITCH", "SUCCESS", null);
         return new SessionTokens(tokenIssuer.issue(accountId, sessionId, context.type(), context.tenantId(),
-                context.permissions(), context.version()), null, now.plus(settings.getAccessTokenTtl()));
+                context.permissions(), context.version(), context.actorRole()), null,
+                now.plus(settings.getAccessTokenTtl()));
+    }
+
+    /**
+     * 将当前浏览器会话切换到数据库中当前生效的平台岗位，并让旧上下文令牌立即失效。
+     * @param accountId 当前令牌中的账号编号
+     * @param sessionId 当前令牌绑定的刷新会话编号
+     * @return 新平台上下文访问令牌；Refresh Cookie 保持不变
+     * @throws BusinessException 账号、会话或平台岗位当前不可用
+     */
+    @Transactional
+    public SessionTokens selectPlatformContext(long accountId, String sessionId) {
+        if (accountId <= 0 || sessionId == null || sessionId.isBlank()) {
+            throw new BusinessException(PlatformError.AUTHENTICATION_FAILED);
+        }
+        SessionRow session = jdbc.query("""
+                SELECT id, family_id, account_id, client_type, context_type, tenant_id, context_version, platform_role,
+                       expires_at, rotated_at, revoked_at
+                FROM auth_refresh_session WHERE id = ? FOR UPDATE
+                """, result -> result.next() ? new SessionRow(result.getString("id"), result.getString("family_id"),
+                result.getLong("account_id"), result.getString("client_type"), result.getString("context_type"),
+                result.getObject("tenant_id", Long.class), result.getInt("context_version"),
+                result.getString("platform_role"), result.getTimestamp("expires_at").toInstant(),
+                instant(result.getTimestamp("rotated_at")), instant(result.getTimestamp("revoked_at"))) : null,
+                sessionId);
+        Instant now = clock.instant();
+        if (session == null || session.accountId() != accountId || session.rotatedAt() != null
+                || session.revokedAt() != null || !session.expiresAt().isAfter(now)
+                || !"ACTIVE".equals(accountStatus(accountId))) {
+            throw new BusinessException(PlatformError.AUTHENTICATION_FAILED);
+        }
+        PlatformAuthorizationService.AuthorizationSnapshot authorization =
+                platformAuthorizations.authorizationForAccount(accountId);
+        if (authorization == null) {
+            recordEvent(accountId, "PLATFORM_CONTEXT_SWITCH", "DENIED", null);
+            throw new BusinessException(PlatformError.ACCESS_DENIED);
+        }
+        int nextVersion = session.contextVersion() + 1;
+        int updated = jdbc.update("""
+                UPDATE auth_refresh_session
+                SET context_type = 'PLATFORM', tenant_id = NULL, platform_role = ?, context_version = ?,
+                    last_used_at = ?
+                WHERE id = ? AND account_id = ? AND rotated_at IS NULL AND revoked_at IS NULL
+                """, authorization.roleCode(), nextVersion, Timestamp.from(now), sessionId, accountId);
+        if (updated != 1) {
+            throw new BusinessException(PlatformError.AUTHENTICATION_FAILED);
+        }
+        recordEvent(accountId, "PLATFORM_CONTEXT_SWITCH", "SUCCESS", null);
+        AuthorizationContext context = new AuthorizationContext("PLATFORM", null, nextVersion,
+                authorization.permissions(), authorization.roleCode());
+        return new SessionTokens(tokenIssuer.issue(accountId, sessionId, context.type(), null,
+                context.permissions(), context.version(), context.actorRole()), null,
+                now.plus(settings.getAccessTokenTtl()));
     }
 
     /**
@@ -196,13 +256,19 @@ public class AuthSessionService {
      * @param contextType JWT 上下文类型
      * @param tenantId JWT 组织编号，个人上下文为空
      * @param contextVersion JWT 中的授权版本
+     * @param actorRole JWT 中的平台岗位；非平台上下文为空
+     * @param permissions JWT 中的权限快照，用于与实时平台岗位核对
      * @return 当前会话、账号、组织和成员全部仍有效时为 true
      */
     public boolean isValidAccessContext(String sessionId, long accountId, String contextType,
-                                        Long tenantId, int contextVersion) {
+                                        Long tenantId, int contextVersion, String actorRole,
+                                        Set<String> permissions) {
         if (sessionId == null || accountId <= 0 || contextVersion < 1
-                || !("PERSONAL".equals(contextType) && tenantId == null
-                || "ORGANIZATION".equals(contextType) && tenantId != null && tenantId > 0)) {
+                || permissions == null
+                || !("PERSONAL".equals(contextType) && tenantId == null && actorRole == null
+                || "ORGANIZATION".equals(contextType) && tenantId != null && tenantId > 0 && actorRole == null
+                || "PLATFORM".equals(contextType) && tenantId == null && actorRole != null
+                && actorRole.matches("[A-Z][A-Z0-9_]{1,47}"))) {
             return false;
         }
         Boolean sessionMatches = jdbc.queryForObject("""
@@ -211,12 +277,19 @@ public class AuthSessionService {
                     JOIN auth_account a ON a.id = s.account_id
                     WHERE s.id = ? AND s.account_id = ? AND a.status = 'ACTIVE'
                       AND s.context_type = ? AND s.tenant_id IS NOT DISTINCT FROM ?
+                      AND s.platform_role IS NOT DISTINCT FROM ?
                       AND s.context_version = ? AND s.rotated_at IS NULL AND s.revoked_at IS NULL
                       AND s.expires_at > CURRENT_TIMESTAMP
                 )
-                """, Boolean.class, sessionId, accountId, contextType, tenantId, contextVersion);
+                """, Boolean.class, sessionId, accountId, contextType, tenantId, actorRole, contextVersion);
         if (!Boolean.TRUE.equals(sessionMatches)) {
             return false;
+        }
+        if ("PLATFORM".equals(contextType)) {
+            PlatformAuthorizationService.AuthorizationSnapshot authorization =
+                    platformAuthorizations.authorizationForAccount(accountId);
+            return authorization != null && actorRole.equals(authorization.roleCode())
+                    && permissions.equals(authorization.permissions());
         }
         if ("PERSONAL".equals(contextType)) {
             return true;
@@ -255,10 +328,10 @@ public class AuthSessionService {
                                Instant now) {
         jdbc.update("""
                 INSERT INTO auth_refresh_session(id, account_id, family_id, token_hash, client_type,
-                    context_type, tenant_id, context_version, expires_at, created_at)
-                VALUES (?, ?, ?, ?, 'WEB', ?, ?, ?, ?, ?)
+                    context_type, tenant_id, context_version, platform_role, expires_at, created_at)
+                VALUES (?, ?, ?, ?, 'WEB', ?, ?, ?, ?, ?, ?)
                 """, id, accountId, familyId, cryptography.hash("refresh:v1", rawToken), context.type(),
-                context.tenantId(), context.version(), Timestamp.from(expiresAt), Timestamp.from(now));
+                context.tenantId(), context.version(), context.actorRole(), Timestamp.from(expiresAt), Timestamp.from(now));
     }
 
     /**
@@ -286,7 +359,7 @@ public class AuthSessionService {
             throw new BusinessException(PlatformError.ACCESS_DENIED);
         }
         Set<String> permissions = permissions(roles[0], roles[1]);
-        return new AuthorizationContext("ORGANIZATION", organizationId, version, permissions);
+        return new AuthorizationContext("ORGANIZATION", organizationId, version, permissions, null);
     }
 
     /**
@@ -303,6 +376,7 @@ public class AuthSessionService {
                 result.add("organization:organizations:write");
                 result.add("organization:members:manage");
                 result.add("organization:membership:request");
+                result.addAll(Set.of("foundation:files:read", "foundation:files:write"));
                 if ("EMPLOYER".equals(organizationRole)) {
                     result.addAll(Set.of("organization:demands:write", "organization:demands:publish",
                             "organization:bids:select"));
@@ -310,7 +384,8 @@ public class AuthSessionService {
                     result.add("organization:bids:write");
                 }
             }
-            case "DEMAND_EDITOR" -> result.add("organization:demands:write");
+            case "DEMAND_EDITOR" -> result.addAll(Set.of("organization:demands:write",
+                    "foundation:files:read", "foundation:files:write"));
             case "DEMAND_PUBLISHER" -> result.add("organization:demands:publish");
             case "SUPPLIER_BIDDER" -> result.add("organization:bids:write");
             case "DEMAND_SELECTOR" -> result.add("organization:bids:select");
@@ -322,7 +397,7 @@ public class AuthSessionService {
     /** 创建只允许开办组织和申请加入的个人账号上下文。 */
     private AuthorizationContext personalContext(int version) {
         return new AuthorizationContext("PERSONAL", null, version,
-                Set.of("organization:create", "organization:membership:request"));
+                Set.of("organization:create", "organization:membership:request"), null);
     }
 
     /**
@@ -339,6 +414,15 @@ public class AuthSessionService {
         }
         if ("ORGANIZATION".equals(contextType) && tenantId != null) {
             return organizationContext(accountId, tenantId, version);
+        }
+        if ("PLATFORM".equals(contextType) && tenantId == null) {
+            PlatformAuthorizationService.AuthorizationSnapshot authorization =
+                    platformAuthorizations.authorizationForAccount(accountId);
+            if (authorization == null) {
+                throw new BusinessException(PlatformError.AUTHENTICATION_FAILED);
+            }
+            return new AuthorizationContext("PLATFORM", null, version, authorization.permissions(),
+                    authorization.roleCode());
         }
         throw new BusinessException(PlatformError.AUTHENTICATION_FAILED);
     }
@@ -386,18 +470,21 @@ public class AuthSessionService {
     }
 
     /** 已由服务端验证的会话权限上下文。 */
-    private record AuthorizationContext(String type, Long tenantId, int version, Set<String> permissions) {
+    private record AuthorizationContext(String type, Long tenantId, int version, Set<String> permissions,
+                                         String actorRole) {
         /**
          * @param type PERSONAL 或 ORGANIZATION
          * @param tenantId 当前组织编号，个人上下文为空
          * @param version 会话当前的授权上下文版本
          * @param permissions 服务端根据当前成员岗位计算的权限
+         * @param actorRole 服务端实时解析的平台岗位；其他上下文为空
          */
     }
 
     /** Refresh Session 轮换所需的数据库快照。 */
     private record SessionRow(String id, String familyId, long accountId, String clientType, String contextType,
-                              Long tenantId, int contextVersion, Instant expiresAt, Instant rotatedAt,
+                              Long tenantId, int contextVersion, String platformRole,
+                              Instant expiresAt, Instant rotatedAt,
                               Instant revokedAt) {
         /**
          * @param id 会话节点编号
@@ -407,6 +494,7 @@ public class AuthSessionService {
          * @param contextType 当前会话上下文
          * @param tenantId 当前选定组织，可为空
          * @param contextVersion 当前会话授权版本
+         * @param platformRole 当前平台岗位；非平台上下文为空
          * @param expiresAt Refresh Token 失效时间
          * @param rotatedAt 旧令牌轮换时间，可为空
          * @param revokedAt 主动或安全撤销时间，可为空

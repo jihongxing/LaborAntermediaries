@@ -42,12 +42,15 @@ public class RequestIdFilter extends OncePerRequestFilter {
         String supplied = request.getHeader("X-Request-Id");
         String requestId = supplied != null && supplied.matches("[A-Za-z0-9_-]{1,64}")
                 ? supplied : UUID.randomUUID().toString();
+        String correlationId = UUID.randomUUID().toString();
         long started = System.nanoTime();
         // 在线程池复用前清除上一请求可能遗留的身份与组织信息。
         UserContext.clear();
         ExecutionContext.clear();
         MDC.put("requestId", requestId);
+        MDC.put("correlationId", correlationId);
         response.setHeader("X-Request-Id", requestId);
+        response.setHeader("X-Correlation-Id", correlationId);
         try {
             chain.doFilter(request, response);
         } finally {
@@ -57,6 +60,7 @@ public class RequestIdFilter extends OncePerRequestFilter {
             UserContext.clear();
             ExecutionContext.clear();
             MDC.remove("requestId");
+            MDC.remove("correlationId");
         }
     }
 }

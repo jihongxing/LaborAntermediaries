@@ -21,8 +21,12 @@ public final class ExecutionContext {
      * @param actorId 正数操作者标识
      * @param tenantId 正数组织标识，可为空，空值不允许访问组织业务
      * @param permissions 非空权限集合，构造时复制以防外部修改
+     * @param contextType 当前个人、组织或平台上下文
+     * @param sessionId 本地认证会话标识；外部身份可为空
+     * @param actorRole 经服务端解析的平台岗位，可为空
      */
-    public record Identity(long actorId, Long tenantId, Set<String> permissions) {
+    public record Identity(long actorId, Long tenantId, Set<String> permissions,
+                           String contextType, String sessionId, String actorRole) {
         /**
          * 校验标识并防御性复制权限。
          * @param actorId 操作者标识
@@ -32,10 +36,26 @@ public final class ExecutionContext {
          * @throws NullPointerException 权限集合或其中元素为空
          */
         public Identity {
-            if (actorId <= 0 || (tenantId != null && tenantId <= 0)) {
+            if (actorId <= 0 || (tenantId != null && tenantId <= 0)
+                    || !Set.of("PERSONAL", "ORGANIZATION", "PLATFORM").contains(contextType)
+                    || ("ORGANIZATION".equals(contextType) != (tenantId != null))
+                    || ("PLATFORM".equals(contextType) && (tenantId != null || sessionId == null
+                    || sessionId.isBlank() || actorRole == null || !actorRole.matches("[A-Z][A-Z0-9_]{1,47}")))
+                    || (!"PLATFORM".equals(contextType) && actorRole != null)
+                    || (sessionId != null && sessionId.isBlank())) {
                 throw new IllegalArgumentException("Identity identifiers must be positive");
             }
             permissions = Set.copyOf(permissions);
+        }
+
+        /**
+         * 为现有内部调用构造个人或组织身份；平台身份必须显式提供会话凭据。
+         * @param actorId 正数操作者标识
+         * @param tenantId 正数组织标识，可为空
+         * @param permissions 非空权限集合
+         */
+        public Identity(long actorId, Long tenantId, Set<String> permissions) {
+            this(actorId, tenantId, permissions, tenantId == null ? "PERSONAL" : "ORGANIZATION", null, null);
         }
     }
 
@@ -50,6 +70,14 @@ public final class ExecutionContext {
             throw new BusinessException(PlatformError.UNAUTHENTICATED);
         }
         return identity;
+    }
+
+    /**
+     * 判断当前线程是否已经绑定可信身份。
+     * @return 已认证或已显式打开后台身份时返回 true
+     */
+    public static boolean isPresent() {
+        return CURRENT.get() != null;
     }
 
     /**
@@ -71,7 +99,9 @@ public final class ExecutionContext {
      * @throws BusinessException 未认证为 HTTP 401，缺少权限为 HTTP 403
      */
     public static void checkPermission(String permission) {
-        if (!require().permissions().contains(permission)) {
+        Identity identity = require();
+        // 平台权限必须走 PlatformAuthorizationService 的实时数据库校验，不接受上下文/JWT 快照。
+        if (permission.startsWith("platform:") || !identity.permissions().contains(permission)) {
             throw new BusinessException(PlatformError.ACCESS_DENIED);
         }
     }

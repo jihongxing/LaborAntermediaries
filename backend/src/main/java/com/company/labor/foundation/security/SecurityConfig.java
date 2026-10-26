@@ -2,6 +2,7 @@ package com.company.labor.foundation.security;
 
 import com.company.labor.common.error.PlatformError;
 import com.company.labor.foundation.FoundationProperties;
+import com.company.labor.foundation.audit.AuditRecorder;
 import com.company.labor.foundation.context.ExecutionContext;
 import com.company.labor.modules.auth.AuthSessionService;
 import jakarta.servlet.FilterChain;
@@ -12,6 +13,7 @@ import org.slf4j.MDC;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpHeaders;
@@ -44,8 +46,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.security.interfaces.RSAPublicKey;
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Collection;
 import java.util.Set;
-import java.util.stream.Collectors;
 import com.nimbusds.jwt.SignedJWT;
 
 /**
@@ -150,14 +153,38 @@ public class SecurityConfig {
                 }
             }
             Object sessionId = jwt.getClaims().get("session_id");
+            Object contextClaim = jwt.getClaims().get("context_type");
+            Object versionClaim = jwt.getClaims().get("context_version");
+            Object actorRole = jwt.getClaims().get("actor_role");
+            if (contextClaim != null && !(contextClaim instanceof String)
+                    || actorRole != null && !(actorRole instanceof String)) {
+                return invalidToken();
+            }
+            String contextType = contextClaim instanceof String value ? value : null;
+            if (actorRole != null && (!"PLATFORM".equals(contextType)
+                    || !((String) actorRole).matches("[A-Z][A-Z0-9_]{1,47}"))) {
+                return invalidToken();
+            }
+            if ("PLATFORM".equals(contextType) && (sessionId == null || tenant != null
+                    || actorRole == null || permissions == null)) {
+                return invalidToken();
+            }
+            if ("PERSONAL".equals(contextType) && tenant != null
+                    || "ORGANIZATION".equals(contextType) && tenant == null
+                    || contextType != null && !Set.of("PERSONAL", "ORGANIZATION", "PLATFORM").contains(contextType)) {
+                return invalidToken();
+            }
             if (sessionId != null) {
-                Object contextType = jwt.getClaims().get("context_type");
-                Object contextVersion = jwt.getClaims().get("context_version");
                 Long tenantId = tenant == null ? null : Long.valueOf(tenant.toString());
-                if (!(sessionId instanceof String value) || sessions == null
-                        || !(contextType instanceof String type) || contextVersion == null
-                        || !sessions.isValidAccessContext(value, Long.parseLong(jwt.getSubject()), type,
-                        tenantId, Integer.parseInt(contextVersion.toString()))) {
+                if (!(sessionId instanceof String value) || value.isBlank() || value.length() > 200
+                        || sessions == null || contextType == null || versionClaim == null
+                        || !(permissions instanceof List<?> values)) {
+                    return invalidToken();
+                }
+                Set<String> permissionSet = values.stream().map(String.class::cast)
+                        .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                if (!sessions.isValidAccessContext(value, Long.parseLong(jwt.getSubject()), contextType,
+                        tenantId, Integer.parseInt(versionClaim.toString()), (String) actorRole, permissionSet)) {
                     return invalidToken();
                 }
             }
@@ -186,12 +213,16 @@ public class SecurityConfig {
      * @throws Exception 安全过滤器链构建失败
      */
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, HttpErrorWriter errors) throws Exception {
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, HttpErrorWriter errors,
+                                                   AuditRecorder audit) throws Exception {
         JwtGrantedAuthoritiesConverter authorities = new JwtGrantedAuthoritiesConverter();
         authorities.setAuthoritiesClaimName("permissions");
         authorities.setAuthorityPrefix("");
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-        converter.setJwtGrantedAuthoritiesConverter(authorities);
+        converter.setJwtGrantedAuthoritiesConverter(jwt -> authorities.convert(jwt).stream()
+                .filter(authority -> !authority.getAuthority().startsWith("platform:"))
+                .toList());
         // 此链依赖 Authorization Bearer 而非 Cookie 会话；权限字符串不额外添加角色前缀。
         return http
                 .csrf(csrf -> csrf.disable())
@@ -206,13 +237,21 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, exception) -> {
+                            audit.recordSecurityEvent("foundation:access:denied", "endpoint", "authentication",
+                                    "DENIED", "UNAUTHENTICATED");
                             response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
                             errors.write(response, PlatformError.UNAUTHENTICATED);
                         })
-                        .accessDeniedHandler((request, response, exception) -> errors.write(response, PlatformError.ACCESS_DENIED)))
+                        .accessDeniedHandler((request, response, exception) -> {
+                            audit.recordSecurityEvent("foundation:access:denied", "endpoint", "authorization",
+                                    "DENIED", "ACCESS_DENIED");
+                            errors.write(response, PlatformError.ACCESS_DENIED);
+                        }))
                 .oauth2ResourceServer(resource -> resource
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(converter))
                         .authenticationEntryPoint((request, response, exception) -> {
+                            audit.recordSecurityEvent("foundation:access:denied", "endpoint", "authentication",
+                                    "DENIED", "INVALID_CREDENTIAL");
                             response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
                             errors.write(response, PlatformError.UNAUTHENTICATED);
                         }))
@@ -231,7 +270,7 @@ public class SecurityConfig {
         cors.setAllowedOrigins(List.copyOf(properties.getSecurity().getAllowedOrigins()));
         cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Request-Id", "Idempotency-Key", "X-CSRF-Token"));
-        cors.setExposedHeaders(List.of("X-Request-Id"));
+        cors.setExposedHeaders(List.of("X-Request-Id", "X-Correlation-Id"));
         cors.setAllowCredentials(!properties.getSecurity().getAllowedOrigins().isEmpty());
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", cors);
@@ -254,10 +293,15 @@ public class SecurityConfig {
             if (SecurityContextHolder.getContext().getAuthentication() instanceof JwtAuthenticationToken authentication) {
                 Jwt jwt = authentication.getToken();
                 Object tenant = jwt.getClaims().get("tenant_id");
-                Set<String> permissions = authentication.getAuthorities().stream()
-                        .map(authority -> authority.getAuthority()).collect(Collectors.toUnmodifiableSet());
+                String contextType = jwt.getClaimAsString("context_type");
+                if (contextType == null) {
+                    contextType = tenant == null ? "PERSONAL" : "ORGANIZATION";
+                }
+                String sessionId = jwt.getClaimAsString("session_id");
+                String actorRole = jwt.getClaimAsString("actor_role");
                 ExecutionContext.Identity identity = new ExecutionContext.Identity(Long.parseLong(jwt.getSubject()),
-                        tenant == null ? null : Long.valueOf(tenant.toString()), permissions);
+                        tenant == null ? null : Long.valueOf(tenant.toString()), claimPermissions(jwt), contextType,
+                        sessionId, actorRole);
                 // 即使下游抛出异常也必须关闭作用域，防止容器复用线程时串用身份。
                 try (ExecutionContext.Scope ignored = ExecutionContext.open(identity, MDC.get("requestId"))) {
                     chain.doFilter(request, response);
@@ -266,5 +310,20 @@ public class SecurityConfig {
                 chain.doFilter(request, response);
             }
         }
+    }
+
+    /**
+     * 提取已经由令牌校验器验证格式的权限声明，保留平台服务端实时核验所需的权限快照。
+     * @param jwt 已签名且完成声明校验的访问令牌
+     * @return 不可变权限集合
+     */
+    private static Set<String> claimPermissions(Jwt jwt) {
+        Object claim = jwt.getClaims().get("permissions");
+        if (!(claim instanceof Collection<?> values)) {
+            return Set.of();
+        }
+        Set<String> permissions = new LinkedHashSet<>();
+        values.forEach(value -> permissions.add((String) value));
+        return Set.copyOf(permissions);
     }
 }

@@ -89,3 +89,31 @@ export async function request<T>(config: AxiosRequestConfig): Promise<T> {
     )
   }
 }
+
+/**
+ * Reads an explicitly authorized non-JSON response through the same authenticated HTTP client.
+ * @param config request settings for a scoped binary endpoint
+ * @return the response body as a browser Blob
+ */
+export async function requestBlob(config: AxiosRequestConfig): Promise<Blob> {
+  try {
+    const response = await client.request<Blob>({ ...config, responseType: 'blob' })
+    return response.data
+  } catch (error) {
+    const axiosError = error as AxiosError<ApiEnvelope<unknown>>
+    const payload = axiosError.response?.data
+    if (payload instanceof Blob) {
+      try {
+        const parsed = JSON.parse(await payload.text()) as Partial<ApiEnvelope<unknown>>
+        throw new ApiError(parsed.message || '请求失败，请稍后重试', parsed.code, parsed.requestId)
+      } catch (parseError) {
+        if (parseError instanceof ApiError) {throw parseError}
+      }
+    }
+    throw new ApiError(
+      axiosError.message || '受控材料预览暂时无法读取',
+      undefined,
+      undefined
+    )
+  }
+}

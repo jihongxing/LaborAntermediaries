@@ -63,7 +63,9 @@ class WebFoundationTest {
             throw new IllegalStateException("test");
         }));
         assertTrue(response.getHeader("X-Request-Id").matches("[A-Za-z0-9_-]{1,64}"));
+        assertTrue(response.getHeader("X-Correlation-Id").matches("[0-9a-f-]{36}"));
         assertNull(MDC.get("requestId"));
+        assertNull(MDC.get("correlationId"));
         assertNull(UserContext.getUserOrNull());
         assertThrows(BusinessException.class, ExecutionContext::require);
     }

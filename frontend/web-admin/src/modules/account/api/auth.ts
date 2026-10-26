@@ -165,6 +165,20 @@ export const authApi = {
   },
 
   /**
+   * Switches the current browser session into the server-authorized platform role.
+   * @return a short-lived platform-context access token
+   */
+  async selectPlatformContext() {
+    const csrf = await fetchCsrfToken()
+    return request<SessionResponse>({
+      method: 'POST',
+      url: '/auth/platform-context',
+      data: {},
+      headers: { 'X-CSRF-Token': csrf },
+    })
+  },
+
+  /**
    * 查询 local/test 回环环境中的 Mock SMS 收件箱。
    * @param challengeId 服务端返回的挑战编号
    * @return 合成验证码，仅 local/test 前端展示

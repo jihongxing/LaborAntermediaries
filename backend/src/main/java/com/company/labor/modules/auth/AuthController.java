@@ -274,6 +274,23 @@ public class AuthController {
     }
 
     /**
+     * 将当前浏览器会话切换为服务端当前有效的平台岗位上下文。
+     * @param token 已验证的本地访问令牌
+     * @param servletRequest 当前浏览器请求，用于双提交 CSRF 检查
+     * @return 新的平台上下文访问令牌；Refresh Cookie 不变
+     * @throws BusinessException 来源、CSRF、会话或平台授权校验失败
+     */
+    @PostMapping("/platform-context")
+    public Result<AuthDtos.SessionResponse> selectPlatformContext(JwtAuthenticationToken token,
+                                                                   HttpServletRequest servletRequest) {
+        requireBrowserMutation(servletRequest);
+        long accountId = Long.parseLong(token.getToken().getSubject());
+        String sessionId = token.getToken().getClaimAsString("session_id");
+        AuthSessionService.SessionTokens tokens = sessions.selectPlatformContext(accountId, sessionId);
+        return Result.success(new AuthDtos.SessionResponse(tokens.accessToken(), tokens.accessExpiresAt(), null));
+    }
+
+    /**
      * 将内部挑战值转换为统一匿名响应，不包含手机号是否已注册。
      * @param challenge 持久化挑战时间信息
      * @return 公开 API 挑战结果

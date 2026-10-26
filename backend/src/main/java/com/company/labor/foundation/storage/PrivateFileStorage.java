@@ -136,6 +136,46 @@ public class PrivateFileStorage {
     }
 
     /**
+     * 打开当前组织成员本人上传的文件供证据类型识别和安全扫描；不允许同组织其他成员代用。
+     * @param id 32 位小写十六进制文件标识
+     * @return 调用方负责关闭输入流的文件元数据和内容
+     * @throws BusinessException 当前身份缺少组织范围、文件不属于本人或文件不可访问
+     * @throws IOException 文件属性读取或输入流打开失败
+     */
+    public Download openOwnedForEvidenceScan(String id) throws IOException {
+        if (id == null || !id.matches("[a-f0-9]{32}")) {
+            throw new BusinessException(PlatformError.RESOURCE_NOT_FOUND);
+        }
+        ExecutionContext.Identity identity = ExecutionContext.require();
+        long tenant = ExecutionContext.requireTenant();
+        if (!"ORGANIZATION".equals(identity.contextType())) {
+            throw new BusinessException(PlatformError.ACCESS_DENIED);
+        }
+        Metadata metadata = jdbc.query("""
+                SELECT id, tenant_id, owner_id, original_name, size_bytes
+                FROM foundation_file WHERE id = ? AND tenant_id = ? AND owner_id = ?
+                """, result -> result.next() ? new Metadata(result.getString("id"), result.getLong("tenant_id"),
+                result.getLong("owner_id"), result.getString("original_name"), result.getLong("size_bytes")) : null,
+                id, tenant, identity.actorId());
+        if (metadata == null) {
+            audit.record("file.evidence.scan", "file", id, "DENIED");
+            throw new BusinessException(PlatformError.RESOURCE_NOT_FOUND);
+        }
+        Path path = root.resolve(id);
+        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || Files.size(path) != metadata.sizeBytes()) {
+            throw new IllegalStateException("Stored evidence file is missing or inconsistent");
+        }
+        InputStream input = Files.newInputStream(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS);
+        try {
+            audit.record("file.evidence.scan", "file", id, "SUCCESS");
+            return new Download(metadata, input);
+        } catch (RuntimeException exception) {
+            input.close();
+            throw exception;
+        }
+    }
+
+    /**
      * 先按当前组织查询，再校验所有者或附加策略，并检查磁盘文件一致性。
      * @param id 32 位小写十六进制文件标识
      * @return 调用方负责关闭输入流的下载对象
@@ -170,6 +210,55 @@ public class PrivateFileStorage {
         InputStream input = Files.newInputStream(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS);
         try {
             audit.record("file.download", "file", id, "SUCCESS");
+            return new Download(metadata, input);
+        } catch (RuntimeException exception) {
+            input.close();
+            throw exception;
+        }
+    }
+
+    /**
+     * 在不切换租户上下文的前提下打开已绑定审核事项的文件；具体授权由业务策略逐次复核。
+     * 不向其他调用方开放 HTTP 路由，也不回退到文件所有者或组织成员权限。
+     * @param id 32 位小写十六进制文件标识
+     * @param scope 服务端从有效认领任务构造的文件访问范围
+     * @return 供预览处理器消费并关闭的原始流；原件不得直接返回浏览器
+     * @throws BusinessException 当前身份不满足平台文件读取约束、范围无效或策略拒绝
+     * @throws IOException 文件属性读取或输入流打开失败
+     */
+    public Download openForPlatform(String id, PlatformFileAccessScope scope) throws IOException {
+        if (id == null || !id.matches("[a-f0-9]{32}") || scope == null || scope.evidenceId() <= 0
+                || scope.taskId() <= 0 || scope.reviewCaseId() <= 0 || scope.tenantId() <= 0
+                || scope.resourceId() <= 0 || scope.resourceVersion() <= 0) {
+            throw new BusinessException(PlatformError.RESOURCE_NOT_FOUND);
+        }
+        ExecutionContext.Identity identity = ExecutionContext.require();
+        if (!"PLATFORM".equals(identity.contextType()) || identity.tenantId() != null) {
+            throw new BusinessException(PlatformError.ACCESS_DENIED);
+        }
+        List<Metadata> rows = jdbc.query("""
+                SELECT id, tenant_id, owner_id, original_name, size_bytes
+                FROM foundation_file WHERE id = ? AND tenant_id = ?
+                """, (row, index) -> new Metadata(row.getString("id"), row.getLong("tenant_id"),
+                row.getLong("owner_id"), row.getString("original_name"), row.getLong("size_bytes")),
+                id, scope.tenantId());
+        if (rows.isEmpty()) {
+            throw new BusinessException(PlatformError.RESOURCE_NOT_FOUND);
+        }
+        Metadata metadata = rows.get(0);
+        if (policies.stream().noneMatch(policy -> policy.mayReadForPlatform(identity, metadata, scope))) {
+            audit.record("file.download", "file", id, "DENIED");
+            throw new BusinessException(PlatformError.RESOURCE_NOT_FOUND);
+        }
+        Path path = root.resolve(id);
+        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || Files.size(path) != metadata.sizeBytes()) {
+            throw new IllegalStateException("Stored file is missing or inconsistent");
+        }
+        InputStream input = Files.newInputStream(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS);
+        try {
+            audit.record("file.download", "file", id, "SUCCESS", new AuditRecorder.AuditDetails(
+                    Long.toString(scope.reviewCaseId()), null, null, Long.toString(scope.taskId()),
+                    scope.resourceVersion(), identity.actorRole(), "EVIDENCE_PREVIEW", scope.purposeCode()));
             return new Download(metadata, input);
         } catch (RuntimeException exception) {
             input.close();

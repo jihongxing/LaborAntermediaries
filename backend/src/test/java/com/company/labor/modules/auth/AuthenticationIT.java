@@ -2,6 +2,7 @@ package com.company.labor.modules.auth;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.company.labor.common.exception.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +36,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -113,6 +115,9 @@ class AuthenticationIT {
     /** 认证挑战服务，用于并发消费验证。 */
     @Autowired
     private AuthChallengeService challenges;
+    /** 平台授权服务，用于模拟受控离线首次引导。 */
+    @Autowired
+    private PlatformAuthorizationService platformAuthorizations;
     /** 按批准期限清理技术认证数据。 */
     @Autowired
     private AuthRetentionCleanup retentionCleanup;
@@ -121,6 +126,13 @@ class AuthenticationIT {
      */
     @BeforeEach
     void clearAuthenticationRecords() {
+        jdbc.execute("TRUNCATE TABLE platform_authorization_event, platform_authorization_bootstrap, "
+                + "platform_authorization_change_request, platform_authorization_grant");
+        // 平台通知和认领记录保留任务、事项及账号外键，须在账号清理前一同截断。
+        jdbc.execute("TRUNCATE TABLE platform_task_recovery_notice, platform_task_claim_request, "
+                + "platform_task_conflict, platform_task_claim, "
+                + "platform_review_evidence_verification, platform_appeal_review_result, platform_review_task, "
+                + "platform_appeal_case, platform_review_correction_item, platform_review_case");
         jdbc.update("DELETE FROM auth_refresh_session");
         jdbc.update("DELETE FROM auth_identity_binding_ticket");
         jdbc.update("DELETE FROM auth_password_reset_ticket");
@@ -130,6 +142,451 @@ class AuthenticationIT {
         jdbc.update("DELETE FROM auth_credential");
         jdbc.update("DELETE FROM auth_login_identity");
         jdbc.update("DELETE FROM auth_account");
+    }
+
+    /** 验证平台岗位必须经受控引导和独立上下文进入，角色权限实时生效且撤权立即拒绝旧令牌。 */
+    @Test
+    void platformAccessRequiresLiveGrantAndRevocationInvalidatesExistingToken() throws Exception {
+        Registered administrator = register("13011130111");
+        Registered organizationReviewer = register("13011130112");
+        Registered ordinaryMember = register("13011130114");
+        long administratorId = accountId(administrator.accessToken());
+        long reviewerId = accountId(organizationReviewer.accessToken());
+        long ordinaryMemberId = accountId(ordinaryMember.accessToken());
+        insertOrganization(ordinaryMemberId, "EMPLOYER", "APPROVED", true);
+
+        http.perform(get("/platform/tasks/recovery-notices"))
+                .andExpect(status().isUnauthorized());
+        http.perform(get("/platform/tasks/recovery-notices")
+                        .header("Authorization", "Bearer " + ordinaryMember.accessToken()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data").isEmpty());
+
+        http.perform(get("/organizations/platform/pending")
+                        .header("Authorization", "Bearer " + administrator.accessToken()))
+                .andExpect(status().isNotFound());
+        http.perform(get("/organizations/platform/pending")
+                        .header("Authorization", "Bearer " + ordinaryMember.accessToken()))
+                .andExpect(status().isNotFound());
+        http.perform(get("/platform/authorizations/changes/pending")
+                        .header("Authorization", "Bearer " + organizationReviewer.accessToken()))
+                .andExpect(status().isForbidden());
+
+        long bootstrapGrantId = platformAuthorizations.bootstrap(99001, administratorId,
+                Instant.now().plusSeconds(3600), "受控集成测试首次授权");
+        assertTrue(bootstrapGrantId > 0);
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM platform_authorization_bootstrap", Integer.class));
+        assertThrows(BusinessException.class, () -> platformAuthorizations.bootstrap(99002, reviewerId,
+                Instant.now().plusSeconds(3600), "重复引导必须拒绝"));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM platform_authorization_grant", Integer.class));
+
+        String administratorToken = enterPlatformContext(administrator.accessToken());
+        SignedJWT parsedAdministratorToken = SignedJWT.parse(administratorToken);
+        assertEquals("PLATFORM", parsedAdministratorToken.getJWTClaimsSet().getStringClaim("context_type"));
+        assertEquals("AUTHORIZATION_ADMIN", parsedAdministratorToken.getJWTClaimsSet().getStringClaim("actor_role"));
+        assertFalse(parsedAdministratorToken.getJWTClaimsSet().getClaims().containsKey("tenant_id"));
+
+        String reviewerExpiry = Instant.now().plusSeconds(1800).toString();
+        MvcResult grantRequest = http.perform(post("/platform/authorizations/changes")
+                        .header("Authorization", "Bearer " + administratorToken)
+                        .contentType("application/json")
+                        .content("""
+                                {"targetAccountId":"%d","action":"GRANT","roleCode":"ORGANIZATION_REVIEWER",
+                                  "expiresAt":"%s","reason":"集成测试岗位授权"}
+                                """.formatted(reviewerId, reviewerExpiry)))
+                .andExpect(status().isOk()).andReturn();
+        assertEquals("APPROVED", data(grantRequest).path("status").asText());
+
+        String reviewerToken = enterPlatformContext(organizationReviewer.accessToken());
+        http.perform(get("/platform/tasks").param("taskType", "ORGANIZATION_REVIEW")
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isOk());
+        http.perform(get("/platform/tasks").param("taskType", "DEMAND_REVIEW")
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isForbidden());
+        http.perform(post("/platform/tasks/999999999/claim")
+                        .header("Authorization", "Bearer " + reviewerToken)
+                        .header("Idempotency-Key", "missing-task-request"))
+                .andExpect(status().isNotFound());
+        http.perform(get("/organizations/platform/pending")
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isNotFound());
+        http.perform(get("/platform/authorizations/changes/pending")
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isForbidden());
+        http.perform(get("/demands/platform/pending")
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isNotFound());
+
+        MvcResult renewal = http.perform(post("/platform/authorizations/changes")
+                        .header("Authorization", "Bearer " + administratorToken)
+                        .contentType("application/json")
+                        .content("""
+                                {"targetAccountId":"%d","action":"RENEW","roleCode":"ORGANIZATION_REVIEWER",
+                                  "expiresAt":"%s","reason":"集成测试岗位续期"}
+                                """.formatted(reviewerId, Instant.now().plusSeconds(3600))))
+                .andExpect(status().isOk()).andReturn();
+        assertEquals("APPROVED", data(renewal).path("status").asText());
+        http.perform(get("/organizations/platform/pending")
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isNotFound());
+
+        MvcResult replacement = http.perform(post("/platform/authorizations/changes")
+                        .header("Authorization", "Bearer " + administratorToken)
+                        .contentType("application/json")
+                        .content("""
+                                {"targetAccountId":"%d","action":"REPLACE","roleCode":"DEMAND_REVIEWER",
+                                  "expiresAt":"%s","reason":"集成测试岗位职责调整"}
+                                """.formatted(reviewerId, Instant.now().plusSeconds(3600))))
+                .andExpect(status().isOk()).andReturn();
+        assertEquals("APPROVED", data(replacement).path("status").asText());
+        http.perform(get("/organizations/platform/pending")
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isUnauthorized());
+
+        MvcResult csrf = http.perform(get("/auth/csrf")).andExpect(status().isOk()).andReturn();
+        MvcResult refreshedReviewer = http.perform(post("/auth/token/refresh")
+                        .cookie(organizationReviewer.refreshCookie(), csrfCookie(csrf))
+                        .header("Origin", "http://127.0.0.1:3000")
+                        .header("X-CSRF-Token", data(csrf).path("token").asText()))
+                .andExpect(status().isOk()).andReturn();
+        String demandReviewerToken = data(refreshedReviewer).path("accessToken").asText();
+        http.perform(get("/platform/tasks").param("taskType", "ORGANIZATION_REVIEW")
+                        .header("Authorization", "Bearer " + demandReviewerToken))
+                .andExpect(status().isForbidden());
+        http.perform(get("/platform/tasks").param("taskType", "DEMAND_REVIEW")
+                        .header("Authorization", "Bearer " + demandReviewerToken))
+                .andExpect(status().isOk());
+        http.perform(get("/organizations/platform/pending")
+                        .header("Authorization", "Bearer " + demandReviewerToken))
+                .andExpect(status().isNotFound());
+        http.perform(get("/demands/platform/pending")
+                        .header("Authorization", "Bearer " + demandReviewerToken))
+                .andExpect(status().isNotFound());
+
+        MvcResult revokeRequest = http.perform(post("/platform/authorizations/changes")
+                        .header("Authorization", "Bearer " + administratorToken)
+                        .contentType("application/json")
+                        .content("""
+                                {"targetAccountId":"%d","action":"REVOKE","roleCode":"DEMAND_REVIEWER",
+                                  "reason":"集成测试撤权"}
+                                """.formatted(reviewerId)))
+                .andExpect(status().isOk()).andReturn();
+        assertEquals("APPROVED", data(revokeRequest).path("status").asText());
+
+        http.perform(get("/demands/platform/pending")
+                        .header("Authorization", "Bearer " + demandReviewerToken))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /** 验证监察岗位授予必须经两名不同授权管理员确认，且组织成员不能成为授权管理员或监察员。 */
+    @Test
+    void independentAuditorAuthorizationRequiresTwoDistinctAdministrators() throws Exception {
+        Registered firstAdministrator = register("13011130115");
+        Registered secondAdministrator = register("13011130116");
+        Registered auditor = register("13011130117");
+        Registered rejectedAuditor = register("13011130119");
+        Registered organizationMember = register("13011130118");
+        long firstAdministratorId = accountId(firstAdministrator.accessToken());
+        long secondAdministratorId = accountId(secondAdministrator.accessToken());
+        long auditorId = accountId(auditor.accessToken());
+        long organizationMemberId = accountId(organizationMember.accessToken());
+        insertOrganization(organizationMemberId, "EMPLOYER", "APPROVED", true);
+
+        platformAuthorizations.bootstrap(99101, firstAdministratorId,
+                Instant.now().plusSeconds(7200), "合成数据授权管理员引导");
+        String firstAdministratorToken = enterPlatformContext(firstAdministrator.accessToken());
+        MvcResult memberAdministratorRequest = http.perform(post("/platform/authorizations/changes")
+                        .header("Authorization", "Bearer " + firstAdministratorToken)
+                        .contentType("application/json")
+                        .content("""
+                                {"targetAccountId":"%d","action":"GRANT","roleCode":"AUTHORIZATION_ADMIN",
+                                  "expiresAt":"%s","reason":"组织成员不可兼任授权管理员"}
+                                """.formatted(organizationMemberId, Instant.now().plusSeconds(3600))))
+                .andExpect(status().isForbidden()).andReturn();
+        assertNotNull(memberAdministratorRequest);
+        MvcResult memberAuditorRequest = http.perform(post("/platform/authorizations/changes")
+                        .header("Authorization", "Bearer " + firstAdministratorToken)
+                        .contentType("application/json")
+                        .content("""
+                                {"targetAccountId":"%d","action":"GRANT","roleCode":"INDEPENDENT_AUDITOR",
+                                  "expiresAt":"%s","reason":"组织成员不可兼任独立监察员"}
+                                """.formatted(organizationMemberId, Instant.now().plusSeconds(3600))))
+                .andExpect(status().isForbidden()).andReturn();
+        assertNotNull(memberAuditorRequest);
+
+        MvcResult secondAdminGrant = http.perform(post("/platform/authorizations/changes")
+                        .header("Authorization", "Bearer " + firstAdministratorToken)
+                        .contentType("application/json")
+                        .content("""
+                                {"targetAccountId":"%d","action":"GRANT","roleCode":"AUTHORIZATION_ADMIN",
+                                  "expiresAt":"%s","reason":"建立第二名合成授权管理员"}
+                                """.formatted(secondAdministratorId, Instant.now().plusSeconds(5400))))
+                .andExpect(status().isOk()).andReturn();
+        assertEquals("APPROVED", data(secondAdminGrant).path("status").asText());
+        String secondAdministratorToken = enterPlatformContext(secondAdministrator.accessToken());
+
+        MvcResult auditorRequest = http.perform(post("/platform/authorizations/changes")
+                        .header("Authorization", "Bearer " + firstAdministratorToken)
+                        .contentType("application/json")
+                        .content("""
+                                {"targetAccountId":"%d","action":"GRANT","roleCode":"INDEPENDENT_AUDITOR",
+                                  "expiresAt":"%s","reason":"监察岗位任命须双人确认"}
+                                """.formatted(auditorId, Instant.now().plusSeconds(3600))))
+                .andExpect(status().isOk()).andReturn();
+        long requestId = data(auditorRequest).path("id").asLong();
+        assertEquals("PENDING", data(auditorRequest).path("status").asText());
+        http.perform(post("/platform/authorizations/changes/{requestId}/approve", requestId)
+                        .header("Authorization", "Bearer " + firstAdministratorToken))
+                .andExpect(status().isForbidden());
+        assertEquals("PENDING", jdbc.queryForObject(
+                "SELECT status FROM platform_authorization_change_request WHERE id = ?", String.class, requestId));
+
+        http.perform(post("/platform/authorizations/changes/{requestId}/approve", requestId)
+                        .header("Authorization", "Bearer " + secondAdministratorToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("APPROVED"));
+        assertEquals(secondAdministratorId, jdbc.queryForObject(
+                "SELECT approved_by FROM platform_authorization_change_request WHERE id = ?", Long.class, requestId));
+        String auditorToken = enterPlatformContext(auditor.accessToken());
+        SignedJWT auditorJwt = SignedJWT.parse(auditorToken);
+        assertEquals("INDEPENDENT_AUDITOR", auditorJwt.getJWTClaimsSet().getStringClaim("actor_role"));
+        assertTrue(auditorJwt.getJWTClaimsSet().getStringListClaim("permissions")
+                .contains("platform:audit:read"));
+        http.perform(get("/platform/authorizations/changes/pending")
+                        .header("Authorization", "Bearer " + auditorToken))
+                .andExpect(status().isForbidden());
+
+        MvcResult rejectedRequest = http.perform(post("/platform/authorizations/changes")
+                        .header("Authorization", "Bearer " + firstAdministratorToken)
+                        .contentType("application/json")
+                        .content("""
+                                {"targetAccountId":"%d","action":"GRANT","roleCode":"INDEPENDENT_AUDITOR",
+                                  "expiresAt":"%s","reason":"测试拒绝流程的监察员候选"}
+                                """.formatted(accountId(rejectedAuditor.accessToken()), Instant.now().plusSeconds(3600))))
+                .andExpect(status().isOk()).andReturn();
+        long rejectedRequestId = data(rejectedRequest).path("id").asLong();
+        http.perform(post("/platform/authorizations/changes/{requestId}/reject", rejectedRequestId)
+                        .header("Authorization", "Bearer " + secondAdministratorToken)
+                        .contentType("application/json")
+                        .content("{\"reason\":\"测试双人拒绝记录\"}"))
+                .andExpect(status().isOk());
+        assertEquals("REJECTED", jdbc.queryForObject(
+                "SELECT status FROM platform_authorization_change_request WHERE id = ?", String.class,
+                rejectedRequestId));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM platform_authorization_grant WHERE account_id = ?",
+                Integer.class, accountId(rejectedAuditor.accessToken())));
+    }
+
+    /** 验证普通登录令牌即使静态包含平台权限，也不能冒充平台上下文读取审核队列。 */
+    @Test
+    void staticPlatformPermissionInPersonalTokenCannotAuthorizeReviewQueue() throws Exception {
+        Registered registered = register("13011130113");
+        long accountId = accountId(registered.accessToken());
+        String forged = signedToken(accountId, null, "PERSONAL", 1,
+                java.util.List.of("platform:organizations:review"), null);
+
+        http.perform(get("/organizations/platform/pending").header("Authorization", "Bearer " + forged))
+                .andExpect(status().isNotFound());
+    }
+
+    /** 经真实 HTTP API 走通组织提交、审核任务认领、版本详情、补正决定及申请方查看。 */
+    @Test
+    void organizationReviewApiCompletesClaimedCorrectionWorkflow() throws Exception {
+        Registered owner = register("13011130121");
+        Registered authorizationAdministrator = register("13011130122");
+        Registered reviewer = register("13011130123");
+        long administratorId = accountId(authorizationAdministrator.accessToken());
+        long reviewerId = accountId(reviewer.accessToken());
+
+        platformAuthorizations.bootstrap(99121, administratorId, Instant.now().plusSeconds(7200),
+                "合成 API 验收首次授权");
+        String administratorToken = enterPlatformContext(authorizationAdministrator.accessToken());
+        http.perform(post("/platform/authorizations/changes")
+                        .header("Authorization", "Bearer " + administratorToken)
+                        .contentType("application/json")
+                        .content("""
+                                {"targetAccountId":"%d","action":"GRANT","roleCode":"ORGANIZATION_REVIEWER",
+                                  "expiresAt":"%s","reason":"组织审核 API 验收岗位授权"}
+                                """.formatted(reviewerId, Instant.now().plusSeconds(3600))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("APPROVED"));
+
+        String registrationId = "synthetic-it-review-" + java.util.UUID.randomUUID();
+        MvcResult organization = http.perform(post("/organizations")
+                        .header("Authorization", "Bearer " + owner.accessToken())
+                        .contentType("application/json")
+                        .content("""
+                                {"organizationRole":"EMPLOYER","legalName":"组织审核 API 合成组织",
+                                  "registrationId":"%s","authorizationReference":"合成授权引用"}
+                                """.formatted(registrationId)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("DRAFT")).andReturn();
+        long organizationId = data(organization).path("id").asLong();
+        http.perform(post("/organizations/{organizationId}/submit", organizationId)
+                        .header("Authorization", "Bearer " + owner.accessToken()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("PENDING_REVIEW"));
+
+        String reviewerToken = enterPlatformContext(reviewer.accessToken());
+        MvcResult queue = http.perform(get("/platform/tasks").param("taskType", "ORGANIZATION_REVIEW")
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isOk()).andReturn();
+        String taskId = data(queue).get(0).path("taskId").asText();
+        http.perform(get("/platform/tasks/{taskId}/organization", taskId)
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isForbidden());
+        http.perform(post("/platform/tasks/{taskId}/claim", taskId)
+                        .header("Authorization", "Bearer " + reviewerToken)
+                        .header("Idempotency-Key", "api-org-review-" + taskId))
+                .andExpect(status().isOk());
+
+        http.perform(get("/platform/tasks/{taskId}/organization", taskId)
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.organizationId").value(Long.toString(organizationId)))
+                .andExpect(jsonPath("$.data.applicationVersion").value(1));
+        http.perform(get("/platform/tasks/{taskId}/evidence", taskId)
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data").isEmpty());
+        http.perform(get("/platform/tasks/{taskId}/evidence/verifications", taskId)
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data").isEmpty());
+        http.perform(get("/platform/tasks/{taskId}/organization", taskId)
+                        .header("Authorization", "Bearer " + administratorToken))
+                .andExpect(status().isForbidden());
+
+        http.perform(post("/platform/tasks/{taskId}/organization/decision", taskId)
+                        .header("Authorization", "Bearer " + reviewerToken)
+                        .contentType("application/json")
+                        .content("""
+                                {"decision":"NEEDS_CORRECTION","reason":"请补充组织授权材料",
+                                  "correctionItems":[{"itemCode":"AUTHORITY","title":"经办授权链",
+                                    "description":"当前材料无法确认签署人的组织授权范围",
+                                    "applicantAction":"补充有效授权文件并说明授权范围"}]}
+                                """))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("NEEDS_CORRECTION"));
+
+        String organizationDecisionId = jdbc.queryForObject("""
+                SELECT id FROM business_review_decision
+                WHERE tenant_id = ? AND resource_type = 'ORGANIZATION' AND resource_id = ?
+                """, String.class, organizationId, organizationId);
+        http.perform(get("/organizations/{organizationId}/review-history", organizationId)
+                        .header("Authorization", "Bearer " + owner.accessToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.currentStatus").value("NEEDS_CORRECTION"))
+                .andExpect(jsonPath("$.data.versions[0].decisionId").value(organizationDecisionId))
+                .andExpect(jsonPath("$.data.unresolvedItems[0]")
+                        .value("经办授权链：补充有效授权文件并说明授权范围"))
+                .andExpect(jsonPath("$.data.versions[0].correctionItems[0].itemCode").value("AUTHORITY"));
+        http.perform(get("/organizations/{organizationId}/review-history", organizationId)
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isForbidden());
+        http.perform(post("/review-decisions/{decisionId}/appeals", organizationDecisionId)
+                        .header("Authorization", "Bearer " + administratorToken)
+                        .contentType("application/json")
+                        .content("{\"reason\":\"无关平台人员不得代申请方发起异议\"}"))
+                .andExpect(status().isForbidden());
+        http.perform(post("/review-decisions/{decisionId}/appeals", organizationDecisionId)
+                        .header("Authorization", "Bearer " + owner.accessToken())
+                        .contentType("application/json")
+                        .content("{\"reason\":\"对补正结论申请独立复核\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING"));
+        http.perform(get("/organizations/{organizationId}/review-history", organizationId)
+                        .header("Authorization", "Bearer " + owner.accessToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.appeals[0].status").value("PENDING"))
+                .andExpect(jsonPath("$.data.appeals[0].outcome").doesNotExist())
+                .andExpect(jsonPath("$.data.appeals[0].reason").doesNotExist());
+    }
+
+    /** 验证需求审核岗位通过专用路由读取当前版本并提交逐项补正，申请方可读取未结事项。 */
+    @Test
+    void demandReviewApiCompletesClaimedCorrectionWorkflow() throws Exception {
+        Registered owner = register("13011130131");
+        Registered authorizationAdministrator = register("13011130132");
+        Registered reviewer = register("13011130133");
+        long ownerId = accountId(owner.accessToken());
+        long administratorId = accountId(authorizationAdministrator.accessToken());
+        long reviewerId = accountId(reviewer.accessToken());
+        platformAuthorizations.bootstrap(99131, administratorId, Instant.now().plusSeconds(7200),
+                "合成需求审核 API 验收首次授权");
+        String administratorToken = enterPlatformContext(authorizationAdministrator.accessToken());
+        http.perform(post("/platform/authorizations/changes")
+                        .header("Authorization", "Bearer " + administratorToken)
+                        .contentType("application/json")
+                        .content("""
+                                {"targetAccountId":"%d","action":"GRANT","roleCode":"DEMAND_REVIEWER",
+                                  "expiresAt":"%s","reason":"需求审核 API 验收岗位授权"}
+                                """.formatted(reviewerId, Instant.now().plusSeconds(3600))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("APPROVED"));
+
+        long organizationId = insertOrganization(ownerId, "EMPLOYER", "APPROVED", true);
+        String organizationToken = enterOrganizationContext(owner.accessToken(), organizationId);
+        Instant startsAt = Instant.now().plusSeconds(86_400);
+        MvcResult demand = http.perform(post("/demands/organizations/{organizationId}", organizationId)
+                        .header("Authorization", "Bearer " + organizationToken)
+                        .header("Idempotency-Key", "api-demand-review-create-" + organizationId)
+                        .contentType("application/json")
+                        .content("""
+                                {"relatedPartyRelation":"用工方直接签约并付款","serviceScope":"现场服务支持",
+                                  "location":"合成测试地点","startsAt":"%s","endsAt":"%s",
+                                  "title":"需求审核 API 合成需求","quantity":3,"quantityUnit":"人",
+                                  "target":"具备现场服务能力","pricingMode":"按人日","measurementBasis":"签到和工时",
+                                  "settlementCycle":"月结","bidDeadline":"%s","confirmationDeadline":"%s",
+                                  "selectionRule":"按响应条件和配额规则评审"}
+                                """.formatted(startsAt, startsAt.plusSeconds(86_400),
+                                startsAt.minusSeconds(3600), startsAt.plusSeconds(172_800))))
+                .andExpect(status().isOk()).andReturn();
+        long demandId = data(demand).path("id").asLong();
+        http.perform(post("/demands/{demandId}/submit", demandId)
+                        .header("Authorization", "Bearer " + organizationToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("PENDING_REVIEW"));
+
+        String reviewerToken = enterPlatformContext(reviewer.accessToken());
+        MvcResult queue = http.perform(get("/platform/tasks").param("taskType", "DEMAND_REVIEW")
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isOk()).andReturn();
+        String taskId = data(queue).get(0).path("taskId").asText();
+        http.perform(get("/platform/tasks/{taskId}/demand", taskId)
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isForbidden());
+        http.perform(post("/platform/tasks/{taskId}/claim", taskId)
+                        .header("Authorization", "Bearer " + reviewerToken)
+                        .header("Idempotency-Key", "api-demand-review-" + taskId))
+                .andExpect(status().isOk());
+        http.perform(get("/platform/tasks/{taskId}/demand", taskId)
+                        .header("Authorization", "Bearer " + reviewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.demandId").value(Long.toString(demandId)))
+                .andExpect(jsonPath("$.data.revision").value(1))
+                .andExpect(jsonPath("$.data.title").value("需求审核 API 合成需求"))
+                .andExpect(jsonPath("$.data.organizationId").doesNotExist());
+        http.perform(post("/platform/tasks/{taskId}/demand/decision", taskId)
+                        .header("Authorization", "Bearer " + reviewerToken)
+                        .contentType("application/json")
+                        .content("""
+                                {"decision":"NEEDS_CORRECTION","reason":"请补充需求响应边界",
+                                  "correctionItems":[{"itemCode":"SERVICE_SCOPE","title":"服务边界",
+                                    "description":"当前需求缺少可核对的服务边界","applicantAction":"补充人员到岗和验收要求"}]}
+                                """))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("NEEDS_CORRECTION"));
+        String demandDecisionId = jdbc.queryForObject("""
+                SELECT id FROM business_review_decision
+                WHERE tenant_id = ? AND resource_type = 'DEMAND' AND resource_id = ?
+                """, String.class, organizationId, demandId);
+        http.perform(get("/demands/{demandId}/review-history", demandId)
+                        .header("Authorization", "Bearer " + organizationToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.versions[0].decisionId").value(demandDecisionId))
+                .andExpect(jsonPath("$.data.unresolvedItems[0]")
+                        .value("服务边界：补充人员到岗和验收要求"));
+        http.perform(post("/review-decisions/{decisionId}/appeals", demandDecisionId)
+                        .header("Authorization", "Bearer " + organizationToken)
+                        .contentType("application/json")
+                        .content("{\"reason\":\"对需求补正结论申请独立复核\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING"));
+        http.perform(get("/demands/{demandId}/review-history", demandId)
+                        .header("Authorization", "Bearer " + organizationToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.appeals[0].status").value("PENDING"));
     }
 
     /** 验证注册只持久化手机号密文和摘要，并签发能通过本地 Resource Server 的 JWT。 */
@@ -284,10 +741,11 @@ class AuthenticationIT {
     @Test
     void personalAccountCanSubmitOnlyItsOwnOrganizationApplication() throws Exception {
         Registered registered = register("13200132000");
+        String registrationId = "synthetic-it-org-" + java.util.UUID.randomUUID();
         String body = """
-                {"organizationRole":"EMPLOYER","legalName":"合成用工组织","registrationId":"synthetic-it-org-132",
+                {"organizationRole":"EMPLOYER","legalName":"合成用工组织","registrationId":"%s",
                   "authorizationReference":"synthetic-auth-ref"}
-                """;
+                """.formatted(registrationId);
         MvcResult created = http.perform(post("/organizations").contentType("application/json")
                         .header("Authorization", "Bearer " + registered.accessToken()).content(body))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("DRAFT"))
@@ -548,6 +1006,60 @@ class AuthenticationIT {
                         .content("{\"phone\":\"" + phone + "\"}"))
                 .andExpect(status().isOk()).andReturn();
         return new StartedChallenge(data(result).path("challengeId").asText(), phone);
+    }
+
+    /** 从已签名测试访问令牌读取账号主体编号。 */
+    private long accountId(String accessToken) throws Exception {
+        return Long.parseLong(SignedJWT.parse(accessToken).getJWTClaimsSet().getSubject());
+    }
+
+    /** 使用当前个人访问令牌及双提交 CSRF 进入已授权的平台执行上下文。 */
+    private String enterPlatformContext(String accessToken) throws Exception {
+        MvcResult csrf = http.perform(get("/auth/csrf")).andExpect(status().isOk()).andReturn();
+        MvcResult switched = http.perform(post("/auth/platform-context")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .header("Origin", "http://127.0.0.1:3000")
+                        .header("X-CSRF-Token", data(csrf).path("token").asText())
+                        .cookie(csrfCookie(csrf)))
+                .andExpect(status().isOk()).andReturn();
+        return data(switched).path("accessToken").asText();
+    }
+
+    /** 使用当前个人访问令牌及双提交 CSRF 进入指定已准入组织上下文。 */
+    private String enterOrganizationContext(String accessToken, long organizationId) throws Exception {
+        MvcResult csrf = http.perform(get("/auth/csrf")).andExpect(status().isOk()).andReturn();
+        MvcResult switched = http.perform(post("/auth/context")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .header("Origin", "http://127.0.0.1:3000")
+                        .header("X-CSRF-Token", data(csrf).path("token").asText())
+                        .cookie(csrfCookie(csrf))
+                        .contentType("application/json")
+                        .content("{\"organizationId\":" + organizationId + "}"))
+                .andExpect(status().isOk()).andReturn();
+        return data(switched).path("accessToken").asText();
+    }
+
+    /** 使用测试私钥签发任意本地 JWT，用于验证客户端声明本身不能建立平台授权。 */
+    private String signedToken(long accountId, String sessionId, String contextType, int contextVersion,
+                               java.util.List<String> permissions, String actorRole) throws Exception {
+        com.nimbusds.jwt.JWTClaimsSet.Builder claims = new com.nimbusds.jwt.JWTClaimsSet.Builder()
+                .issuer("labor-auth").audience(java.util.List.of("labor-backend"))
+                .subject(Long.toString(accountId)).issueTime(java.util.Date.from(Instant.now()))
+                .notBeforeTime(java.util.Date.from(Instant.now().minusSeconds(1)))
+                .expirationTime(java.util.Date.from(Instant.now().plusSeconds(600)))
+                .jwtID(java.util.UUID.randomUUID().toString())
+                .claim("context_type", contextType).claim("context_version", contextVersion)
+                .claim("permissions", permissions);
+        if (sessionId != null) {
+            claims.claim("session_id", sessionId);
+        }
+        if (actorRole != null) {
+            claims.claim("actor_role", actorRole);
+        }
+        com.nimbusds.jwt.SignedJWT token = new com.nimbusds.jwt.SignedJWT(
+                new com.nimbusds.jose.JWSHeader(com.nimbusds.jose.JWSAlgorithm.RS256), claims.build());
+        token.sign(new com.nimbusds.jose.crypto.RSASSASigner((java.security.interfaces.RSAPrivateKey) KEYS.getPrivate()));
+        return token.serialize();
     }
 
     /**

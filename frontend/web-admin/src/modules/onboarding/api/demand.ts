@@ -1,5 +1,5 @@
 import { request } from '../../../platform/http/client'
-import type { Demand, DemandForm } from './types'
+import type { ApplicantReviewHistory, Demand, DemandForm } from './types'
 
 export const demandApi = {
   create(organizationId: string, form: DemandForm) {
@@ -12,6 +12,9 @@ export const demandApi = {
   },
   list(organizationId: string) {
     return request<Demand[]>({ method: 'GET', url: `/demands/organizations/${organizationId}` })
+  },
+  reviewHistory(id: string) {
+    return request<ApplicantReviewHistory>({ method: 'GET', url: `/demands/${id}/review-history` })
   },
   update(demand: Demand, form: DemandForm) {
     return request<Demand>({

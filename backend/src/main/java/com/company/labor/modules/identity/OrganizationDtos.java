@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
+import java.util.List;
 
 /** 首批组织与成员接口使用的请求、响应数据结构；不承载证件正文或身份凭据。 */
 public final class OrganizationDtos {
@@ -48,8 +49,29 @@ public final class OrganizationDtos {
      * 组织审核决定；补正和拒绝必须提供理由。
      * @param decision 通过、补正或拒绝
      * @param reason 面向申请人的审核理由
+     * @param correctionItems 要求补正时必须提供的逐项问题和申请人可执行动作
      */
-    public record ReviewRequest(@NotNull OrganizationReviewDecision decision, String reason) {
+    public record ReviewRequest(@NotNull OrganizationReviewDecision decision,
+                                @Size(max = 1000) String reason,
+                                @Size(max = 20) List<@jakarta.validation.Valid CorrectionItemRequest> correctionItems) {
+        /** 保留通过/拒绝调用方的简洁构造方式；补正决定仍由领域服务强制要求清单。 */
+        public ReviewRequest(OrganizationReviewDecision decision, String reason) {
+            this(decision, reason, List.of());
+        }
+    }
+
+    /** 单条对申请方公开的补正问题及建议动作。 */
+    public record CorrectionItemRequest(
+            @NotBlank @Size(max = 64) String itemCode,
+            @NotBlank @Size(max = 120) String title,
+            @NotBlank @Size(max = 1000) String description,
+            @NotBlank @Size(max = 1000) String applicantAction) {
+        /**
+         * @param itemCode 本次审核版本内唯一的问题代码
+         * @param title 申请方可理解的问题标题
+         * @param description 核验发现或材料缺项说明
+         * @param applicantAction 申请方可以执行的补正动作
+         */
     }
 
     /**

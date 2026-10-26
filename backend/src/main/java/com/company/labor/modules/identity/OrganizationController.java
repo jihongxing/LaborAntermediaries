@@ -5,9 +5,9 @@ import com.company.labor.modules.identity.OrganizationDtos.JoinRequest;
 import com.company.labor.modules.identity.OrganizationDtos.MembershipDecisionRequest;
 import com.company.labor.modules.identity.OrganizationDtos.MembershipView;
 import com.company.labor.modules.identity.OrganizationDtos.MembershipRequestView;
-import com.company.labor.modules.identity.OrganizationDtos.ReviewRequest;
 import com.company.labor.modules.identity.OrganizationDtos.UpdateRequest;
 import com.company.labor.modules.identity.OrganizationDtos.View;
+import com.company.labor.modules.platform.ReviewCaseHistoryService;
 import com.company.labor.common.Result;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,19 +20,23 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** 提供组织申请、加入和平台审核的认证 JSON API；账号注册与令牌签发由外部身份服务负责。 */
+/** 提供组织申请方的认证 JSON API；平台审核使用独立岗位任务路由。 */
 @RestController
 @RequestMapping("/organizations")
 public class OrganizationController {
     /** 组织生命周期和授权业务服务。 */
     private final OrganizationService organizations;
+    /** 经组织管理员授权的申请历史读取服务。 */
+    private final ReviewCaseHistoryService reviewHistory;
 
     /**
      * 创建组织接口控制器。
      * @param organizations 组织业务服务
+     * @param reviewHistory 事项历史服务
      */
-    public OrganizationController(OrganizationService organizations) {
+    public OrganizationController(OrganizationService organizations, ReviewCaseHistoryService reviewHistory) {
         this.organizations = organizations;
+        this.reviewHistory = reviewHistory;
     }
 
     /**
@@ -46,7 +50,7 @@ public class OrganizationController {
     }
 
     /**
-     * 查询当前成员可访问的组织状态；材料引用只返回给组织管理员或平台审核员。
+     * 查询当前成员可访问的组织状态；材料引用只返回给组织管理员。
      * @param organizationId 组织标识
      * @return 组织视图
      */
@@ -56,12 +60,14 @@ public class OrganizationController {
     }
 
     /**
-     * 查询平台待审核组织申请。
-     * @return 当前审核队列
+     * 查询组织管理员所属组织的审核事项历史。
+     * @param organizationId 组织编号
+     * @return 该组织已提交申请的公开历史
      */
-    @GetMapping("/platform/pending")
-    public Result<List<View>> pendingReviews() {
-        return Result.success(organizations.pendingReviews());
+    @GetMapping("/{organizationId}/review-history")
+    public Result<com.company.labor.modules.platform.ReviewCaseHistoryDtos.View> reviewHistory(
+            @PathVariable long organizationId) {
+        return Result.success(reviewHistory.applicantOrganizationHistory(organizationId));
     }
 
     /**
@@ -119,14 +125,4 @@ public class OrganizationController {
         return Result.success(organizations.decideJoin(organizationId, requestId, request));
     }
 
-    /**
-     * 由具备平台组织审核权限的身份审批组织申请。
-     * @param organizationId 组织标识
-     * @param request 审核决定及理由
-     * @return 审核后的组织视图
-     */
-    @PostMapping("/platform/{organizationId}/review")
-    public Result<View> review(@PathVariable long organizationId, @Valid @RequestBody ReviewRequest request) {
-        return Result.success(organizations.review(organizationId, request));
-    }
 }

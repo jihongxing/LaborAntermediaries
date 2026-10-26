@@ -1,12 +1,18 @@
 package com.company.labor.modules.demand;
 
 import com.company.labor.modules.demand.DemandDtos.ReviewRequest;
+import com.company.labor.modules.demand.DemandDtos.ReviewSubject;
 import com.company.labor.modules.demand.DemandDtos.UpsertRequest;
 import com.company.labor.modules.demand.DemandDtos.View;
+import com.company.labor.modules.demand.DemandDtos.CorrectionItemRequest;
 import com.company.labor.modules.identity.MembershipRole;
 import com.company.labor.modules.identity.OrganizationAuthorization;
 import com.company.labor.modules.identity.OrganizationRole;
 import com.company.labor.modules.bidding.BiddingService;
+import com.company.labor.modules.platform.ReviewCaseHistoryService;
+import com.company.labor.modules.platform.ReviewCaseType;
+import com.company.labor.modules.platform.PlatformTaskService;
+import com.company.labor.modules.platform.PlatformTaskType;
 import com.company.labor.common.error.PlatformError;
 import com.company.labor.common.exception.BusinessException;
 import com.company.labor.foundation.audit.AuditRecorder;
@@ -26,6 +32,7 @@ import java.util.Map;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.HashSet;
 
 /** 实现用工需求的草稿、审核、发布、暂停和撤回流程，并连接 BP-04 的交易门禁。 */
 @Service
@@ -44,11 +51,27 @@ public class DemandService {
     private final DemandDeliveryService deliveries;
     /** 需求关闭时同步关闭未完成应标和授予的生命周期服务。 */
     private final BiddingService bidding;
+    /** 首次提交时建立稳定事项并关联需求版本及审计事件。 */
+    private final ReviewCaseHistoryService reviewHistory;
+    /** 需求提交、认领及审核决定共享事务的岗位任务服务。 */
+    private final PlatformTaskService platformTasks;
 
-    /** 创建需求业务服务。 */
+    /**
+     * 创建需求业务服务。
+     * @param jdbc 需求持久化入口
+     * @param ids 业务标识生成服务
+     * @param authorization 组织成员与状态授权服务
+     * @param audit 追加式审计入口
+     * @param idempotency 业务操作幂等执行器
+     * @param deliveries 需求跨组织字段白名单投递服务
+     * @param bidding 应标生命周期服务
+     * @param reviewHistory 稳定事项与历史服务
+     * @param platformTasks 版本绑定的审核任务服务
+     */
     public DemandService(JdbcTemplate jdbc, SequenceIds ids, OrganizationAuthorization authorization,
                          AuditRecorder audit, IdempotentExecutor idempotency, DemandDeliveryService deliveries,
-                         BiddingService bidding) {
+                         BiddingService bidding, ReviewCaseHistoryService reviewHistory,
+                         PlatformTaskService platformTasks) {
         this.jdbc = jdbc;
         this.ids = ids;
         this.authorization = authorization;
@@ -56,6 +79,8 @@ public class DemandService {
         this.idempotency = idempotency;
         this.deliveries = deliveries;
         this.bidding = bidding;
+        this.reviewHistory = reviewHistory;
+        this.platformTasks = platformTasks;
     }
 
     /**
@@ -84,7 +109,8 @@ public class DemandService {
                 VALUES (?, ?, ?, 'DRAFT', 1, ?)
                 """, demandId, organizationId, organizationId, actor);
         insertRevision(demandId, organizationId, 1, request, actor);
-        audit.record("demand:create", "demand", Long.toString(demandId), "SUCCESS");
+        audit.record("demand:create", "demand", Long.toString(demandId), "SUCCESS",
+                reviewHistory.auditDetails(ReviewCaseType.DEMAND, demandId, organizationId, 1, "DRAFT_CREATED"));
         return get(demandId);
     }
 
@@ -126,8 +152,14 @@ public class DemandService {
         ensureUpdated(updated);
         if (reopensReview) {
             bidding.closeForDemand(demandId);
+            long reviewCaseId = reviewHistory.openOnSubmission(ReviewCaseType.DEMAND, demandId,
+                    demand.organizationId(), expectedRevision + 1, actor);
+            platformTasks.openReviewTaskOnSubmission(reviewCaseId, ReviewCaseType.DEMAND, demandId,
+                    demand.organizationId(), expectedRevision + 1);
         }
-        audit.record("demand:update", "demand", Long.toString(demandId), "SUCCESS");
+        audit.record("demand:update", "demand", Long.toString(demandId), "SUCCESS",
+                reviewHistory.auditDetails(ReviewCaseType.DEMAND, demandId, demand.organizationId(),
+                        expectedRevision + 1, reopensReview ? "RESUBMITTED_FOR_REVIEW" : "VERSION_CREATED"));
         return get(demandId);
     }
 
@@ -154,7 +186,13 @@ public class DemandService {
                       AND current_revision > COALESCE(reviewed_revision, 0)))
                 """, ExecutionContext.require().actorId(), demandId, demand.organizationId(), demand.revision());
         ensureUpdated(updated);
-        audit.record("demand:submit", "demand", Long.toString(demandId), "SUCCESS");
+        long reviewCaseId = reviewHistory.openOnSubmission(ReviewCaseType.DEMAND, demandId, demand.organizationId(),
+                demand.revision(), ExecutionContext.require().actorId());
+        platformTasks.openReviewTaskOnSubmission(reviewCaseId, ReviewCaseType.DEMAND, demandId,
+                demand.organizationId(), demand.revision());
+        audit.record("demand:submit", "demand", Long.toString(demandId), "SUCCESS",
+                reviewHistory.auditDetails(ReviewCaseType.DEMAND, demandId, demand.organizationId(),
+                        demand.revision(), "APPLICATION_SUBMITTED"));
         return get(demandId);
     }
 
@@ -174,9 +212,30 @@ public class DemandService {
                 || Objects.equals(demand.submittedBy(), actor)) {
             throw new BusinessException(PlatformError.ACCESS_DENIED);
         }
+        PlatformTaskService.TaskRef taskRef = platformTasks.requireClaimedReviewTask(
+                ReviewCaseType.DEMAND, demandId, demand.revision());
         String reason = request.reason() == null || request.reason().isBlank() ? null : request.reason().trim();
         if (request.decision() != ReviewRequest.Decision.APPROVE && reason == null) {
             throw new BusinessException(PlatformError.INVALID_ARGUMENT);
+        }
+        List<CorrectionItemRequest> correctionItems = request.correctionItems() == null
+                ? List.of() : request.correctionItems();
+        if (request.decision() == ReviewRequest.Decision.NEEDS_CORRECTION
+                && (correctionItems.isEmpty() || correctionItems.size() > 20)) {
+            throw new BusinessException(PlatformError.INVALID_ARGUMENT);
+        }
+        if (request.decision() != ReviewRequest.Decision.NEEDS_CORRECTION && !correctionItems.isEmpty()) {
+            throw new BusinessException(PlatformError.INVALID_ARGUMENT);
+        }
+        Set<String> correctionCodes = new HashSet<>();
+        for (CorrectionItemRequest item : correctionItems) {
+            if (item == null || item.itemCode() == null || item.title() == null || item.description() == null
+                    || item.applicantAction() == null || item.itemCode().trim().isEmpty()
+                    || item.title().trim().isEmpty() || item.description().trim().isEmpty()
+                    || item.applicantAction().trim().isEmpty()
+                    || !correctionCodes.add(item.itemCode().trim())) {
+                throw new BusinessException(PlatformError.INVALID_ARGUMENT);
+            }
         }
         DemandStatus next = switch (request.decision()) {
             case APPROVE -> DemandStatus.APPROVED_PENDING_PUBLISH;
@@ -198,7 +257,15 @@ public class DemandService {
                 VALUES (?, 'DEMAND', ?, ?, ?, ?, ?, ?, ?)
                 """, demand.organizationId(), demandId, demand.revision(), demand.status().name(),
                 request.decision().name(), next.name(), actor, reason);
-        audit.record("demand:review", "demand", Long.toString(demandId), "SUCCESS");
+        if (request.decision() == ReviewRequest.Decision.NEEDS_CORRECTION) {
+            reviewHistory.appendCorrectionItems(ReviewCaseType.DEMAND, demandId, demand.organizationId(), taskRef,
+                    correctionItems.stream().map(item -> new ReviewCaseHistoryService.CorrectionItemInput(
+                            item.itemCode(), item.title(), item.description(), item.applicantAction())).toList(), actor);
+        }
+        audit.record("demand:review", "demand", Long.toString(demandId), "SUCCESS",
+                reviewHistory.auditDetails(ReviewCaseType.DEMAND, demandId, demand.organizationId(),
+                        demand.revision(), request.decision().name()));
+        platformTasks.completeReviewTask(taskRef, request.decision().name());
         return requireRow(demandId).view();
     }
 
@@ -226,8 +293,40 @@ public class DemandService {
                 """, demandId, demand.organizationId(), demand.revision());
         ensureUpdated(updated);
         deliveries.deliver(demandId, demand.organizationId(), demand.revision());
-        audit.record("demand:publish", "demand", Long.toString(demandId), "SUCCESS");
+        audit.record("demand:publish", "demand", Long.toString(demandId), "SUCCESS",
+                reviewHistory.auditDetails(ReviewCaseType.DEMAND, demandId, demand.organizationId(),
+                        demand.revision(), "DEMAND_PUBLISHED"));
         return get(demandId);
+    }
+
+    /**
+     * 读取已认领需求审核任务绑定的版本字段；响应不包含应标、供应商资料或报价记录。
+     * @param taskId 当前审核员已认领的需求审核任务
+     * @return 当前审核版本的需求字段白名单
+     * @throws BusinessException 任务无效、类型不符、版本过期或审核员存在回避冲突
+     */
+    @Transactional
+    public ReviewSubject reviewSubject(long taskId) {
+        var scope = requireDemandReviewScope(taskId);
+        DemandRow demand = requireRow(scope.resourceId());
+        if (demand.organizationId() != scope.tenantId()
+                || demand.revision() != scope.resourceVersion() || demand.status() != DemandStatus.PENDING_REVIEW) {
+            throw new BusinessException(PlatformError.VERSION_CONFLICT);
+        }
+        return demand.reviewSubject();
+    }
+
+    /**
+     * 按已认领的需求任务提交审核决定，确保路由编号不能被替换为其他需求编号。
+     * @param taskId 当前审核员已认领的需求审核任务
+     * @param request 审核决定、理由和逐项补正清单
+     * @return 审核后的需求当前状态
+     * @throws BusinessException 任务无效、版本过期、权限不足或审核字段不合法
+     */
+    @Transactional
+    public View reviewTask(long taskId, ReviewRequest request) {
+        ReviewSubject subject = reviewSubject(taskId);
+        return review(Long.parseLong(subject.demandId()), request);
     }
 
     /**
@@ -248,7 +347,9 @@ public class DemandService {
                 UPDATE business_demand SET status = 'SUSPENDED', updated_at = CURRENT_TIMESTAMP
                 WHERE id = ? AND tenant_id = ? AND status = 'OPEN_FOR_BID'
                 """, demandId, demand.organizationId()));
-        audit.record("demand:suspend", "demand", Long.toString(demandId), "SUCCESS");
+        audit.record("demand:suspend", "demand", Long.toString(demandId), "SUCCESS",
+                reviewHistory.auditDetails(ReviewCaseType.DEMAND, demandId, demand.organizationId(),
+                        demand.revision(), "DEMAND_SUSPENDED"));
         return get(demandId);
     }
 
@@ -271,7 +372,9 @@ public class DemandService {
                 WHERE id = ? AND tenant_id = ? AND status IN ('OPEN_FOR_BID', 'SUSPENDED')
                 """, demandId, demand.organizationId()));
         bidding.closeForDemand(demandId);
-        audit.record("demand:close", "demand", Long.toString(demandId), "SUCCESS");
+        audit.record("demand:close", "demand", Long.toString(demandId), "SUCCESS",
+                reviewHistory.auditDetails(ReviewCaseType.DEMAND, demandId, demand.organizationId(),
+                        demand.revision(), "DEMAND_CLOSED"));
         return get(demandId);
     }
 
@@ -350,25 +453,26 @@ public class DemandService {
     }
 
     /**
-     * 查询平台待审核需求队列。
-     * @return 当前待审核需求，最多返回 100 条
+     * 查询需求审核岗位最小任务队列，不返回未认领事项详情或材料引用。
+     * @return 当前审核岗位的任务摘要
      * @throws BusinessException 当前身份没有平台需求审核权限
      */
-    public List<View> pendingReviews() {
-        authorization.requirePlatformPermission("platform:demands:review");
-        return jdbc.query("""
-                SELECT d.id, d.organization_id, d.status, d.current_revision, d.created_by, d.submitted_by,
-                       d.review_reason, r.title, r.quantity, r.quantity_unit, r.starts_at, r.ends_at,
-                       r.bid_deadline, r.confirmation_deadline, r.service_scope, r.location,
-                       r.related_party_relation, r.target, r.pricing_mode, r.measurement_basis,
-                       r.settlement_cycle, r.selection_rule
-                FROM business_demand d
-                JOIN business_demand_revision r ON r.demand_id = d.id
-                    AND r.tenant_id = d.tenant_id AND r.revision = d.current_revision
-                WHERE d.status = 'PENDING_REVIEW'
-                ORDER BY d.updated_at, d.id
-                LIMIT 100
-                """, (result, row) -> mapRow(result).view());
+    public List<PlatformTaskService.QueueItem> pendingReviews() {
+        return platformTasks.queue(PlatformTaskType.DEMAND_REVIEW);
+    }
+
+    /**
+     * 校验平台任务为当前账号持有的有效需求审核任务。
+     * @param taskId 平台审核任务编号
+     * @return 通过岗位、认领、版本和回避校验的需求范围
+     * @throws BusinessException 任务类型不符、无有效认领或权限不足
+     */
+    private PlatformTaskService.EvidenceTaskScope requireDemandReviewScope(long taskId) {
+        PlatformTaskService.EvidenceTaskScope scope = platformTasks.requireEvidenceTask(taskId);
+        if (!"DEMAND".equals(scope.resourceType()) || !"DEMAND_REVIEW".equals(scope.taskType())) {
+            throw new BusinessException(PlatformError.ACCESS_DENIED);
+        }
+        return scope;
     }
 
     /** 读取当前供应商租户的单条投递快照，避免跨租户读取需求源表。 */
@@ -580,6 +684,17 @@ public class DemandService {
             return new View(id, organizationId, revision, status, title, quantity, quantityUnit, startsAt, endsAt,
                     bidDeadline, serviceScope, location, null, target, pricingMode,
                     measurementBasis, settlementCycle, confirmationDeadline, selectionRule, null);
+        }
+
+        /**
+         * 构造不含组织标识、应标数据、供应商资料和实际报价的审核字段白名单。
+         * @return 需求审核员可见的当前版本字段
+         */
+        private ReviewSubject reviewSubject() {
+            return new ReviewSubject(Long.toString(id), revision, status.name(), title, quantity, quantityUnit,
+                    startsAt, endsAt, bidDeadline, serviceScope, location, relatedPartyRelation, target,
+                    pricingMode, measurementBasis, settlementCycle, confirmationDeadline, selectionRule,
+                    reviewReason);
         }
     }
 }

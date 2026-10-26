@@ -78,11 +78,31 @@ public final class LocalTokenIssuer {
      */
     public String issue(long accountId, String sessionId, String contextType, Long tenantId,
                         Set<String> permissions, int contextVersion) {
+        return issue(accountId, sessionId, contextType, tenantId, permissions, contextVersion, null);
+    }
+
+    /**
+     * 签发绑定服务端持久会话版本、组织或平台岗位上下文的访问令牌。
+     * @param accountId 已确认处于 ACTIVE 的账号编号
+     * @param sessionId 已持久化 Refresh Session 编号
+     * @param contextType PERSONAL、ORGANIZATION 或 PLATFORM
+     * @param tenantId 服务端确认的组织编号，个人和平台上下文为空
+     * @param permissions 服务端查询或计算的权限快照
+     * @param contextVersion 当前会话上下文版本
+     * @param actorRole 服务端解析的平台岗位代码；非平台上下文必须为空
+     * @return RS256 签名的紧凑 JWT
+     * @throws IllegalArgumentException 上下文、岗位或版本无效
+     * @throws IllegalStateException RSA 签名失败
+     */
+    public String issue(long accountId, String sessionId, String contextType, Long tenantId,
+                        Set<String> permissions, int contextVersion, String actorRole) {
         if (accountId <= 0 || sessionId == null || sessionId.isBlank()) {
             throw new IllegalArgumentException("A valid account and session are required");
         }
-        if (!("PERSONAL".equals(contextType) && tenantId == null
-                || "ORGANIZATION".equals(contextType) && tenantId != null && tenantId > 0)
+        if (!("PERSONAL".equals(contextType) && tenantId == null && actorRole == null
+                || "ORGANIZATION".equals(contextType) && tenantId != null && tenantId > 0 && actorRole == null
+                || "PLATFORM".equals(contextType) && tenantId == null && actorRole != null
+                && actorRole.matches("[A-Z][A-Z0-9_]{1,47}"))
                 || contextVersion < 1 || permissions == null) {
             throw new IllegalArgumentException("A valid authorization context is required");
         }
@@ -101,6 +121,9 @@ public final class LocalTokenIssuer {
                 .claim("permissions", permissions.stream().sorted().toList());
         if (tenantId != null) {
             builder.claim("tenant_id", tenantId);
+        }
+        if (actorRole != null) {
+            builder.claim("actor_role", actorRole);
         }
         JWTClaimsSet claims = builder.build();
         SignedJWT jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.RS256), claims);

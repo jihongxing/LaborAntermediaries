@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { authApi } from './api/auth'
 import { setToken } from '../../platform/session/session'
 import PublicHeader from '../../shared/ui/PublicHeader.vue'
@@ -9,6 +10,7 @@ type LoginMethod = 'sms' | 'password'
 
 const props = defineProps<{ mode: AuthMode }>()
 const emit = defineEmits<{ navigate: [path: string] }>()
+const route = useRoute()
 
 const phone = ref('')
 const password = ref('')
@@ -99,7 +101,15 @@ async function submitLogin() {
     return
   }
   setToken(result.accessToken)
-  emit('navigate', '/account')
+  const redirect = route.query.redirect
+  const destination =
+    typeof redirect === 'string' &&
+    redirect.startsWith('/') &&
+    !redirect.startsWith('//') &&
+    !redirect.includes('\\')
+      ? redirect
+      : '/account'
+  emit('navigate', destination)
 }
 
 async function submitPasswordRecovery() {

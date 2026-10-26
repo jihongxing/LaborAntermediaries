@@ -18,5 +18,16 @@ services:
       timeout: 3s
       retries: 20
 
+  clamav-test:
+    image: ${CLAMAV_IMAGE:-docker.m.daocloud.io/clamav/clamav:1.4}
+    container_name: labor-backend-clamav-test
+    ports:
+      - "127.0.0.1:3310:3310"
+    healthcheck:
+      test: ["CMD-SHELL", "printf health | clamdscan --stream --ping=1 --wait - >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+
 volumes:
   postgres-test-data:

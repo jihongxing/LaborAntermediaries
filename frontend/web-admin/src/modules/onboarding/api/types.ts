@@ -32,6 +32,44 @@ export interface Organization {
   reviewReason?: string
 }
 
+export interface OrganizationCorrectionItem {
+  correctionItemId: string
+  itemCode: string
+  title: string
+  description: string
+  applicantAction: string
+  createdAt: string
+}
+
+export interface ApplicantReviewHistory {
+  reviewCaseId: string
+  resourceType: 'ORGANIZATION' | 'DEMAND'
+  resourceId: string
+  currentStatus: string
+  currentVersion: number
+  historyCoverage: string
+  versions: Array<{
+    resourceVersion: number
+    createdAt: string
+    submittedAt?: string
+    decisionId?: string
+    decision?: string
+    decisionAt?: string
+    publicReason?: string
+    correctionItems: OrganizationCorrectionItem[]
+  }>
+  appeals: Array<{
+    appealCaseId: string
+    resourceVersion: number
+    status: 'PENDING' | 'IN_REVIEW' | 'REVIEWED' | 'SUPERSEDED'
+    outcome?: 'UPHOLD_ORIGINAL' | 'REQUEST_RECONSIDERATION'
+    reviewedAt?: string
+  }>
+  unresolvedItems: string[]
+}
+
+export type OrganizationReviewHistory = ApplicantReviewHistory & { resourceType: 'ORGANIZATION' }
+
 export interface MembershipRequest {
   requestId: string
   actorId: string

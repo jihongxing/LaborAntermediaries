@@ -1,8 +1,15 @@
 <script setup lang="ts">
+/* eslint-disable max-lines */
 import { onMounted, ref } from 'vue'
 import { authApi, type AccountSummary, type OrganizationEntry } from './api/auth'
 import { identityApi } from '../onboarding/api/identity'
-import type { MembershipRole, OrganizationForm, OrganizationRole } from '../onboarding/api/types'
+import type {
+  MembershipRole,
+  OrganizationCorrectionItem,
+  OrganizationForm,
+  OrganizationRole,
+  OrganizationReviewHistory,
+} from '../onboarding/api/types'
 import { logoutSession, setOrganizationId, setToken } from '../../platform/session/session'
 import PublicHeader from '../../shared/ui/PublicHeader.vue'
 import OrganizationApplicationForm from './OrganizationApplicationForm.vue'
@@ -11,6 +18,8 @@ import AccountOrganizationActions from './AccountOrganizationActions.vue'
 import JoinOrganizationForm from './JoinOrganizationForm.vue'
 import AccountSummaryNav from './AccountSummaryNav.vue'
 import AccountStatusNote from './AccountStatusNote.vue'
+import AccountRecoveryNotices from './AccountRecoveryNotices.vue'
+import AccountPlatformEntry from './AccountPlatformEntry.vue'
 
 const emit = defineEmits<{ navigate: [path: string] }>()
 
@@ -24,6 +33,11 @@ const joinFormVisible = ref(false)
 const editingOrganizationId = ref<string>()
 const editingOrganizationVersion = ref('')
 const correctionReason = ref('')
+const correctionItems = ref<OrganizationCorrectionItem[]>([])
+const appealHistory = ref<OrganizationReviewHistory>()
+const appealReason = ref('')
+const appealNotice = ref('')
+const appealBusy = ref(false)
 const organizationRole = ref<OrganizationRole>('EMPLOYER')
 const requestedRole = ref<MembershipRole>('DEMAND_EDITOR')
 const organizationIdInput = ref('')
@@ -48,6 +62,7 @@ async function loadAccount() {
     loading.value = false
   }
 }
+
 
 async function createOrganization() {
   error.value = ''
@@ -97,6 +112,10 @@ async function editOrganizationCorrection(organizationId: string) {
     editingOrganizationId.value = organizationId
     editingOrganizationVersion.value = organization.version
     correctionReason.value = organization.reviewReason || '平台尚未提供补正说明。'
+    const history = await identityApi.organizationReviewHistory(organizationId)
+    correctionItems.value = history.versions.find(
+      version => version.resourceVersion === history.currentVersion
+    )?.correctionItems ?? []
     organizationRole.value = organization.organizationRole
     form.value = {
       organizationRole: organization.organizationRole,
@@ -111,6 +130,50 @@ async function editOrganizationCorrection(organizationId: string) {
     error.value = cause instanceof Error ? cause.message : '组织补正资料暂时无法读取。'
   } finally {
     actionBusy.value = false
+  }
+}
+
+/** 只读取当前组织管理员获准查看的版本和对外决定。 */
+async function openOrganizationAppeal(organizationId: string) {
+  appealHistory.value = undefined
+  appealNotice.value = ''
+  appealReason.value = ''
+  error.value = ''
+  appealBusy.value = true
+  try {
+    appealHistory.value = await identityApi.organizationReviewHistory(organizationId)
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '审核历史暂时无法读取。'
+  } finally {
+    appealBusy.value = false
+  }
+}
+
+/** 将当前有效审核决定与本人说明交给服务端校验并创建复核事项。 */
+async function submitOrganizationAppeal() {
+  const history = appealHistory.value
+  const decisionId = history?.versions.find(
+    version => version.resourceVersion === history.currentVersion
+  )?.decisionId
+  if (!decisionId || !appealReason.value.trim()) {
+    error.value = '请选择当前审核决定并填写复核理由。'
+    return
+  }
+  appealBusy.value = true
+  error.value = ''
+  try {
+    const created = await identityApi.createAppeal(decisionId, appealReason.value.trim())
+    appealNotice.value = `独立复核申请已提交，事项编号 ${created.appealCaseId}。原审核决定不会自动变更。`
+    appealReason.value = ''
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '独立复核申请未提交。'
+  } finally {
+    try {
+      appealHistory.value = await identityApi.organizationReviewHistory(history.resourceId)
+    } catch {
+      error.value ||= '复核进度暂时无法刷新，请稍后重试。'
+    }
+    appealBusy.value = false
   }
 }
 
@@ -129,6 +192,7 @@ async function saveOrganizationCorrection() {
     await identityApi.submitOrganization(organizationId)
     editingOrganizationId.value = undefined
     correctionReason.value = ''
+    correctionItems.value = []
     await loadAccount()
   } catch (cause) {
     error.value =
@@ -154,6 +218,7 @@ async function submitOrganizationForm() {
 function cancelOrganizationForm() {
   editingOrganizationId.value = undefined
   correctionReason.value = ''
+  correctionItems.value = []
   createFormVisible.value = false
 }
 
@@ -261,6 +326,9 @@ onMounted(loadAccount)
             </span>
           </div>
 
+          <AccountRecoveryNotices />
+          <AccountPlatformEntry @navigate="emit('navigate', $event)" />
+
           <AccountOrganizationActions @create="toggleOrganizationForm" @join="toggleJoinForm" />
 
           <OrganizationApplicationForm
@@ -269,6 +337,7 @@ onMounted(loadAccount)
             :organization-role="organizationRole"
             :is-correction="Boolean(editingOrganizationId)"
             :correction-reason="correctionReason"
+            :correction-items="correctionItems"
             :action-busy="actionBusy"
             @update:form="form = $event"
             @submit="submitOrganizationForm"
@@ -294,7 +363,53 @@ onMounted(loadAccount)
             @enter="enterOrganization"
             @submit="submitOrganization"
             @correct="editOrganizationCorrection"
+            @appeal="openOrganizationAppeal"
           />
+
+          <section v-if="appealHistory" class="workspace-access-card account-appeal">
+            <div>
+              <span class="eyebrow">组织审核历史</span>
+              <h2>对当前决定申请独立复核</h2>
+              <p>组织编号 {{ appealHistory.resourceId }} · 当前版本 v{{ appealHistory.currentVersion }}</p>
+              <p v-for="version in appealHistory.versions" :key="version.resourceVersion">
+                v{{ version.resourceVersion }} · {{ version.decision || '尚无决定' }}
+                <span v-if="version.publicReason"> · {{ version.publicReason }}</span>
+              </p>
+              <p v-for="appeal in appealHistory.appeals" :key="appeal.appealCaseId">
+                复核事项 {{ appeal.appealCaseId }} · {{ appeal.status }}
+                <span v-if="appeal.outcome"> · {{ appeal.outcome }}</span>
+                <span v-if="appeal.outcome"> · 原审核状态不会自动变更</span>
+              </p>
+              <p v-if="appealHistory.appeals.some(appeal => appeal.outcome)">
+                复核意见类型是流程反馈；详细对外答复仍需按已批准披露流程处理。
+              </p>
+              <textarea
+                v-if="appealHistory.versions.some(version =>
+                  version.resourceVersion === appealHistory?.currentVersion &&
+                  version.decisionId) &&
+                  !appealHistory.appeals.some(appeal =>
+                    appeal.resourceVersion === appealHistory?.currentVersion &&
+                    ['PENDING', 'IN_REVIEW'].includes(appeal.status))"
+                v-model="appealReason"
+                maxlength="2000"
+                placeholder="说明对当前审核决定有异议的事实与理由"
+                aria-label="独立复核理由"
+              ></textarea>
+              <button
+                class="public-outline"
+                type="button"
+                :disabled="appealBusy || !appealReason.trim()"
+                @click="submitOrganizationAppeal"
+              >提交复核申请</button>
+              <button
+                class="text-action"
+                type="button"
+                :disabled="appealBusy"
+                @click="openOrganizationAppeal(appealHistory.resourceId)"
+              >刷新复核进度</button>
+              <p v-if="appealNotice" role="status">{{ appealNotice }}</p>
+            </div>
+          </section>
 
           <AccountStatusNote />
         </section>

@@ -74,6 +74,13 @@ public class FoundationProperties {
         /** 单文件大小上限，单位字节，默认 10 MiB，最小为 1。 */
         @Min(1)
         private long maxBytes = 10 * 1024 * 1024;
+        /** ClamAV clamd 的受控服务地址；默认空值表示禁用证据接入且必须失败关闭。 */
+        private String evidenceScannerHost = "";
+        /** ClamAV clamd 的 TCP 端口，默认 3310；仅允许 1 到 65535。 */
+        @Min(1)
+        private int evidenceScannerPort = 3310;
+        /** 单次上传内容扫描超时，默认 10 秒；生产值须与网关和最大文件大小协调。 */
+        private Duration evidenceScannerTimeout = Duration.ofSeconds(10);
     }
 
     /** 数据库任务队列参数，时间值使用 Duration 支持的配置格式。 */

@@ -1,7 +1,8 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import PublicPortal from './modules/public/PublicPortal.vue'
 import AuthPage from './modules/account/AuthPage.vue'
-import { renewSession, useSession } from './platform/session/session'
+import { renewSession, setToken, useSession } from './platform/session/session'
+import { authApi } from './modules/account/api/auth'
 
 const routes: RouteRecordRaw[] = [
   { path: '/', name: 'public-home', component: PublicPortal },
@@ -32,6 +33,61 @@ const routes: RouteRecordRaw[] = [
     component: () => import('./modules/workspace/OrganizationWorkspacePage.vue'),
     props: true,
     meta: { requiresAuth: true, requiresOrganization: true },
+  },
+  {
+    path: '/platform',
+    name: 'platform-home',
+    component: () => import('./modules/platform/PlatformHomePage.vue'),
+    meta: { requiresAuth: true, requiresPlatform: true },
+  },
+  {
+    path: '/platform/reviews/organizations',
+    name: 'platform-organization-reviews',
+    component: () => import('./modules/platform/PlatformReviewPage.vue'),
+    meta: { requiresAuth: true, requiresPlatform: true },
+  },
+  {
+    path: '/platform/reviews/demands',
+    name: 'platform-demand-reviews',
+    component: () => import('./modules/platform/PlatformDemandReviewPage.vue'),
+    meta: { requiresAuth: true, requiresPlatform: true },
+  },
+  {
+    path: '/platform/reviews/appeals',
+    name: 'platform-appeal-reviews',
+    component: () => import('./modules/platform/PlatformAppealReviewPage.vue'),
+    meta: { requiresAuth: true, requiresPlatform: true },
+  },
+  {
+    path: '/platform/reviews/appeals/:appealId',
+    name: 'platform-appeal-detail',
+    component: () => import('./modules/platform/PlatformAppealReviewPage.vue'),
+    meta: { requiresAuth: true, requiresPlatform: true },
+  },
+  {
+    path: '/platform/audit',
+    name: 'platform-audit',
+    component: () => import('./modules/platform/PlatformAuditPage.vue'),
+    meta: { requiresAuth: true, requiresPlatform: true },
+  },
+  {
+    path: '/platform/audit/coverage',
+    name: 'platform-audit-coverage',
+    component: () => import('./modules/platform/PlatformAuditCoveragePage.vue'),
+    meta: { requiresAuth: true, requiresPlatform: true },
+  },
+  {
+    path: '/platform/audit/findings',
+    name: 'platform-audit-findings',
+    component: () => import('./modules/platform/PlatformAuditFindingsPage.vue'),
+    meta: { requiresAuth: true, requiresPlatform: true },
+  },
+  {
+    path: '/platform/audit/requests/:reviewCaseId',
+    name: 'platform-audit-request-history',
+    component: () => import('./modules/platform/PlatformAuditHistoryPage.vue'),
+    props: true,
+    meta: { requiresAuth: true, requiresPlatform: true },
   },
 ]
 
@@ -65,5 +121,13 @@ export const router = createRouter({
 router.beforeEach(async to => {
   if (to.meta.requiresAuth && !useSession().token.value && !(await renewSession())) {
     return { name: 'login', query: { redirect: to.fullPath } }
+  }
+  if (to.meta.requiresPlatform) {
+    try {
+      const session = await authApi.selectPlatformContext()
+      setToken(session.accessToken)
+    } catch {
+      return { name: 'account', query: { platform: 'denied', redirect: to.fullPath } }
+    }
   }
 })

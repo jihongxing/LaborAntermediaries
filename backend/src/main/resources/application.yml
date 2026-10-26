@@ -25,6 +25,7 @@ spring:
     timeout-per-shutdown-phase: 30s
 server:
   port: ${PORT:8080}
+  address: ${SERVER_ADDRESS:127.0.0.1}
   shutdown: graceful
   forward-headers-strategy: none
   servlet:
@@ -101,9 +102,19 @@ foundation:
     active-key: ${CRYPTO_ACTIVE_KEY:}
   storage:
     root: ${STORAGE_ROOT:./var/private-files}
+    evidence-scanner-host: ${EVIDENCE_SCANNER_HOST:}
+    evidence-scanner-port: ${EVIDENCE_SCANNER_PORT:3310}
+    evidence-scanner-timeout: ${EVIDENCE_SCANNER_TIMEOUT:10s}
   tasks:
     enabled: ${TASKS_ENABLED:false}
 logging:
   level:
     root: INFO
     com.company.labor: INFO
+
+# 数据库审计失败记录写入独立 JSON Lines 文件；恢复导入必须在数据库可用后显式开启。
+audit:
+  failure-log:
+    path: ${AUDIT_FAILURE_LOG_PATH:${LOG_PATH:logs}/audit-failures.jsonl}
+  failure-recovery:
+    enabled: ${AUDIT_FAILURE_RECOVERY_ENABLED:false}

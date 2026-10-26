@@ -11,6 +11,7 @@ const emit = defineEmits<{
   enter: [entry: OrganizationEntry]
   submit: [organizationId: string]
   correct: [organizationId: string]
+  appeal: [organizationId: string]
 }>()
 
 const statusLabels: Record<OrganizationEntry['organizationStatus'], string> = {
@@ -96,6 +97,16 @@ function membershipLabel(entry: OrganizationEntry) {
             查看意见并补正
           </button>
           <span v-else class="status-pill neutral">等待组织或平台处理</span>
+          <button
+            v-if="entry.memberRole === 'ORGANIZATION_ADMIN' &&
+              ['REJECTED', 'NEEDS_CORRECTION'].includes(entry.organizationStatus)"
+            class="text-action"
+            type="button"
+            :disabled="actionBusy"
+            @click="emit('appeal', entry.organizationId)"
+          >
+            查看审核历史与申请复核
+          </button>
         </div>
       </article>
     </div>

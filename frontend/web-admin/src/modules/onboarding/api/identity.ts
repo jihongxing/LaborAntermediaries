@@ -1,5 +1,11 @@
 import { request } from '../../../platform/http/client'
-import type { MembershipRequest, MembershipRole, Organization, OrganizationForm } from './types'
+import type {
+  MembershipRequest,
+  MembershipRole,
+  Organization,
+  OrganizationForm,
+  OrganizationReviewHistory,
+} from './types'
 
 export const identityApi = {
   createOrganization(form: OrganizationForm) {
@@ -7,6 +13,19 @@ export const identityApi = {
   },
   getOrganization(id: string) {
     return request<Organization>({ method: 'GET', url: `/organizations/${id}` })
+  },
+  organizationReviewHistory(id: string) {
+    return request<OrganizationReviewHistory>({
+      method: 'GET',
+      url: `/organizations/${id}/review-history`,
+    })
+  },
+  createAppeal(decisionId: string, reason: string) {
+    return request<{ appealCaseId: string; taskId: string; status: string }>({
+      method: 'POST',
+      url: `/review-decisions/${decisionId}/appeals`,
+      data: { reason },
+    })
   },
   updateOrganization(id: string, form: OrganizationForm & { expectedVersion: string }) {
     const {

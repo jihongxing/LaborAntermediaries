@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import type { OrganizationForm } from '../onboarding/api/types'
+import type { OrganizationCorrectionItem, OrganizationForm } from '../onboarding/api/types'
 
 const props = defineProps<{
   form: OrganizationForm
   organizationRole: OrganizationForm['organizationRole']
   isCorrection: boolean
   correctionReason: string
+  correctionItems: OrganizationCorrectionItem[]
   actionBusy: boolean
 }>()
 
@@ -37,9 +38,14 @@ function updateField(key: keyof OrganizationForm, event: Event) {
         </h2>
       </div>
     </div>
-    <p v-if="isCorrection" class="auth-message account-error" role="status">
-      平台补正意见：{{ correctionReason }}
-    </p>
+    <section v-if="isCorrection" class="account-correction-list" role="status">
+      <strong>平台补正意见：{{ correctionReason }}</strong>
+      <article v-for="item in correctionItems" :key="item.correctionItemId">
+        <span>{{ item.title }}</span>
+        <p>{{ item.description }}</p>
+        <small>请完成：{{ item.applicantAction }}</small>
+      </article>
+    </section>
     <div class="account-form-grid">
       <label>
         <span>组织法定名称</span>
